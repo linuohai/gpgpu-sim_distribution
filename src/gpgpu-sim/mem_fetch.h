@@ -30,6 +30,8 @@
 #define MEM_FETCH_H
 
 #include <bitset>
+#include <utility>
+#include <vector>
 #include "../abstract_hardware_model.h"
 #include "addrdec.h"
 
@@ -96,6 +98,17 @@ class mem_fetch {
   unsigned get_sid() const { return m_sid; }
   unsigned get_tpc() const { return m_tpc; }
   unsigned get_wid() const { return m_wid; }
+  void dbg_add_lane_addr(unsigned lane_id, addr_t addr) {
+    m_dbg_lanes.emplace_back(lane_id, addr);
+  }
+  const std::vector<std::pair<unsigned, addr_t>> &dbg_lanes() const {
+    return m_dbg_lanes;
+  }
+  void dbg_set_op(bool is_store) {
+    m_dbg_has_op = true;
+    m_dbg_is_store = is_store;
+  }
+  bool dbg_is_store() const { return m_dbg_has_op && m_dbg_is_store; }
   bool istexture() const;
   bool isconst() const;
   enum mf_type get_type() const { return m_type; }
@@ -178,6 +191,9 @@ class mem_fetch {
                      // size), so the pointer refers to the original request
   mem_fetch *original_wr_mf;  // this pointer refers to the original write req,
                               // when fetch-on-write policy is used
+  std::vector<std::pair<unsigned, addr_t>> m_dbg_lanes;
+  bool m_dbg_has_op;
+  bool m_dbg_is_store;
 };
 
 #endif

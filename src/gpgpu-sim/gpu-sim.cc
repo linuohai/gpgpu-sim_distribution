@@ -50,6 +50,7 @@
 #include "gpu-cache.h"
 #include "gpu-misc.h"
 #include "icnt_wrapper.h"
+#include "l1_tracer.h"
 #include "l2cache.h"
 #include "shader.h"
 #include "stat-tool.h"
@@ -702,6 +703,10 @@ void gpgpu_sim_config::reg_options(option_parser_t opp) {
   option_parser_register(opp, "-gpgpu_flush_l2_cache", OPT_BOOL,
                          &gpgpu_flush_l2_cache,
                          "Flush L2 cache at the end of each kernel call", "0");
+  option_parser_register(opp, "-l1_trace_enable", OPT_BOOL, &m_l1_trace_enable,
+                         "Enable per-lane L1 cache tracing", "0");
+  option_parser_register(opp, "-l1_trace_path", OPT_CSTR, &m_l1_trace_path,
+                         "CSV output path for L1 cache trace", "");
   option_parser_register(
       opp, "-gpgpu_deadlock_detect", OPT_BOOL, &gpu_deadlock_detect,
       "Stop the simulation at deadlock (1=on (default), 0=off)", "1");
@@ -941,6 +946,7 @@ void gpgpu_sim::set_kernel_done(kernel_info_t *kernel) {
     }
   }
   assert(k != m_running_kernels.end());
+  l1_tracer::flush_all();
 }
 
 void gpgpu_sim::stop_all_running_kernels() {
@@ -1044,6 +1050,8 @@ gpgpu_sim::gpgpu_sim(const gpgpu_sim_config &config, gpgpu_context *ctx)
 
   m_running_kernels.resize(config.max_concurrent_kernel, NULL);
   m_last_issued_kernel = 0;
+  l1_tracer::init(m_config.l1_trace_enabled(), m_config.l1_trace_path(),
+                  m_config.num_shader());
   m_last_cluster_issue = m_shader_config->n_simt_clusters -
                          1;  // this causes first launch to use simt cluster 0
   *average_pipeline_duty_cycle = 0;
@@ -1274,6 +1282,7 @@ void gpgpu_sim::print_stats(unsigned long long streamID) {
         "----------------------------END-of-Interconnect-DETAILS---------------"
         "----------\n");
   }
+  l1_tracer::flush_all();
 }
 
 void gpgpu_sim::deadlock_check() {

@@ -466,6 +466,12 @@ class gpgpu_sim_config : public power_config,
   }
 
   bool flush_l1() const { return gpgpu_flush_l1_cache; }
+  bool l1_trace_enabled() const {
+    return m_l1_trace_enable && m_l1_trace_path && m_l1_trace_path[0] != '\0';
+  }
+  const char *l1_trace_path() const {
+    return m_l1_trace_path ? m_l1_trace_path : "";
+  }
 
  private:
   void init_clock_domains(void);
@@ -498,6 +504,8 @@ class gpgpu_sim_config : public power_config,
   int gpgpu_cflog_interval;
   char *gpgpu_clock_domains;
   unsigned max_concurrent_kernel;
+  bool m_l1_trace_enable;
+  char *m_l1_trace_path;
 
   // visualizer
   bool g_visualizer_enabled;
