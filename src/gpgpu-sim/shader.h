@@ -2048,6 +2048,15 @@ class shader_core_mem_fetch_allocator : public mem_fetch_allocator {
         access, &inst_copy, inst.get_streamID(),
         access.is_write() ? WRITE_PACKET_SIZE : READ_PACKET_SIZE,
         inst.warp_id(), m_core_id, m_cluster_id, m_memory_config, cycle);
+    const active_mask_t &mask = access.get_warp_mask();
+    if (mask.any()) {
+      for (unsigned lane = 0; lane < inst.warp_size(); ++lane) {
+        if (mask.test(lane)) {
+          mf->dbg_add_lane_addr(lane, inst.get_addr(lane));
+        }
+      }
+      mf->dbg_set_op(access.is_write());
+    }
     return mf;
   }
 
