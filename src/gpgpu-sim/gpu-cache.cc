@@ -34,6 +34,7 @@
 #include <assert.h>
 #include "gpu-sim.h"
 #include "hashing.h"
+#include "l1_tracer.h"
 #include "stat-tool.h"
 
 // used to allocate memory that is large enough to adapt the changes in cache
@@ -2001,7 +2002,12 @@ enum cache_request_status data_cache::access(new_addr_type addr, mem_fetch *mf,
 enum cache_request_status l1_cache::access(new_addr_type addr, mem_fetch *mf,
                                            unsigned time,
                                            std::list<cache_event> &events) {
-  return data_cache::access(addr, mf, time, events);
+  enum cache_request_status status =
+      data_cache::access(addr, mf, time, events);
+  unsigned long long cycle =
+      m_gpu ? (m_gpu->gpu_tot_sim_cycle + m_gpu->gpu_sim_cycle) : 0ULL;
+  l1_tracer::emit(mf->get_sid(), mf->get_wid(), mf, status, cycle);
+  return status;
 }
 
 // The l2 cache access function calls the base data_cache access
