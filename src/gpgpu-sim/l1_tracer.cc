@@ -25,7 +25,10 @@ void l1_tracer::init(bool enable, const char *path, unsigned n_sms) {
     s_enabled = false;
     s_path.clear();
     s_buffers.clear();
+    return;
   }
+
+  file << "cycle,sm_id,warp_id,lane_id,op,address,l1_status,pc\n";
 }
 
 void l1_tracer::emit(unsigned sid, unsigned wid, const mem_fetch *mf,
@@ -40,11 +43,20 @@ void l1_tracer::emit(unsigned sid, unsigned wid, const mem_fetch *mf,
   const char *op = mf->dbg_is_store() ? "ST" : "LD";
 
   std::ostringstream oss;
+  address_type pc = mf->get_pc();
+  bool has_pc = pc != static_cast<address_type>(-1);
+
   for (const auto &entry : lanes) {
     oss << cycle << ',' << sid << ',' << wid << ',' << entry.first << ',' << op
         << ',';
     oss << "0x" << std::hex << entry.second << std::dec << ',' << status_name
-        << ',' << mf->get_request_uid() << '\n';
+        << ',';
+    if (has_pc) {
+      oss << "0x" << std::hex << pc << std::dec;
+    } else {
+      oss << "NA";
+    }
+    oss << '\n';
   }
 
   std::string &buffer = s_buffers[sid];
