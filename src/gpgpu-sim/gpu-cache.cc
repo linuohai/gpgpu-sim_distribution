@@ -2006,7 +2006,10 @@ enum cache_request_status l1_cache::access(new_addr_type addr, mem_fetch *mf,
       data_cache::access(addr, mf, time, events);
   unsigned long long cycle =
       m_gpu ? (m_gpu->gpu_tot_sim_cycle + m_gpu->gpu_sim_cycle) : 0ULL;
-  l1_tracer::emit(mf->get_sid(), mf->get_wid(), mf, status, cycle);
+  double hbm_bw = m_gpu ? m_gpu->get_last_hbm_bandwidth_gbps() : 0.0;
+  double hbm_occ = m_gpu ? m_gpu->get_last_hbm_occupancy() : 0.0;
+  l1_tracer::emit(mf->get_sid(), mf->get_wid(), mf, status, cycle,
+                  m_config.get_line_sz(), hbm_bw, hbm_occ);
   return status;
 }
 

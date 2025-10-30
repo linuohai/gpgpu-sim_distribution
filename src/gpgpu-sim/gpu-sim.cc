@@ -1017,6 +1017,8 @@ gpgpu_sim::gpgpu_sim(const gpgpu_sim_config &config, gpgpu_context *ctx)
   gpu_tot_sim_cycle_parition_util = 0;
   partiton_replys_in_parallel = 0;
   partiton_replys_in_parallel_total = 0;
+  m_last_hbm_bandwidth_gbps = 0.0;
+  m_last_hbm_occupancy = 0.0;
   last_streamID = -1;
 
   gpu_kernel_time.clear();
@@ -2012,6 +2014,16 @@ void gpgpu_sim::cycle() {
     }
   }
   partiton_replys_in_parallel += partiton_replys_in_parallel_per_cycle;
+  if (clock_mask & ICNT) {
+    double bytes = static_cast<double>(partiton_replys_in_parallel_per_cycle) *
+                   m_memory_config->dram_atom_size;
+    double period = m_config.icnt_period;
+    if (period > 0.0) {
+      m_last_hbm_bandwidth_gbps = bytes / period / 1.0e9;
+    } else {
+      m_last_hbm_bandwidth_gbps = 0.0;
+    }
+  }
 
   if (clock_mask & DRAM) {
     for (unsigned i = 0; i < m_memory_config->m_n_mem; i++) {
@@ -2063,6 +2075,15 @@ void gpgpu_sim::cycle() {
   if (partiton_reqs_in_parallel_per_cycle > 0) {
     partiton_reqs_in_parallel_util += partiton_reqs_in_parallel_per_cycle;
     gpu_sim_cycle_parition_util++;
+  }
+  if (clock_mask & L2) {
+    if (m_memory_config->m_n_mem_sub_partition) {
+      m_last_hbm_occupancy =
+          static_cast<double>(partiton_reqs_in_parallel_per_cycle) /
+          static_cast<double>(m_memory_config->m_n_mem_sub_partition);
+    } else {
+      m_last_hbm_occupancy = 0.0;
+    }
   }
 
   if (clock_mask & ICNT) {

@@ -14,7 +14,8 @@ class l1_tracer {
   static void init(bool enable, const char *path, unsigned n_sms);
   static void emit(unsigned sid, unsigned wid, const mem_fetch *mf,
                    enum cache_request_status status,
-                   unsigned long long cycle);
+                   unsigned long long cycle, unsigned line_sz,
+                   double hbm_bandwidth_gbps, double hbm_occupancy);
   static void flush_all();
 
  private:

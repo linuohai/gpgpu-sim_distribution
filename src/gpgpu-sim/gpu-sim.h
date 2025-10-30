@@ -782,6 +782,8 @@ class gpgpu_sim : public gpgpu_t {
   unsigned long long gpu_tot_sim_cycle_parition_util;
   unsigned long long partiton_replys_in_parallel;
   unsigned long long partiton_replys_in_parallel_total;
+  double m_last_hbm_bandwidth_gbps;
+  double m_last_hbm_occupancy;
 
   FuncCache get_cache_config(std::string kernel_name);
   void set_cache_config(std::string kernel_name, FuncCache cacheConfig);
@@ -801,6 +803,10 @@ class gpgpu_sim : public gpgpu_t {
   std::vector<kernel_info_t *> get_running_kernels() {
     return m_running_kernels;
   }
+  double get_last_hbm_bandwidth_gbps() const {
+    return m_last_hbm_bandwidth_gbps;
+  }
+  double get_last_hbm_occupancy() const { return m_last_hbm_occupancy; }
   void functional_launch(kernel_info_t *k) {
     m_functional_sim = true;
     m_functional_sim_kernel = k;
