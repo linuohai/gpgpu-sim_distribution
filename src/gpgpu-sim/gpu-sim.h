@@ -466,6 +466,12 @@ class gpgpu_sim_config : public power_config,
   }
 
   bool flush_l1() const { return gpgpu_flush_l1_cache; }
+  bool l1_trace_enabled() const {
+    return m_l1_trace_enable && m_l1_trace_path && m_l1_trace_path[0] != '\0';
+  }
+  const char *l1_trace_path() const {
+    return m_l1_trace_path ? m_l1_trace_path : "";
+  }
 
  private:
   void init_clock_domains(void);
@@ -498,6 +504,8 @@ class gpgpu_sim_config : public power_config,
   int gpgpu_cflog_interval;
   char *gpgpu_clock_domains;
   unsigned max_concurrent_kernel;
+  bool m_l1_trace_enable;
+  char *m_l1_trace_path;
 
   // visualizer
   bool g_visualizer_enabled;
@@ -774,6 +782,8 @@ class gpgpu_sim : public gpgpu_t {
   unsigned long long gpu_tot_sim_cycle_parition_util;
   unsigned long long partiton_replys_in_parallel;
   unsigned long long partiton_replys_in_parallel_total;
+  double m_last_hbm_bandwidth_gbps;
+  double m_last_hbm_occupancy;
 
   FuncCache get_cache_config(std::string kernel_name);
   void set_cache_config(std::string kernel_name, FuncCache cacheConfig);
@@ -793,6 +803,10 @@ class gpgpu_sim : public gpgpu_t {
   std::vector<kernel_info_t *> get_running_kernels() {
     return m_running_kernels;
   }
+  double get_last_hbm_bandwidth_gbps() const {
+    return m_last_hbm_bandwidth_gbps;
+  }
+  double get_last_hbm_occupancy() const { return m_last_hbm_occupancy; }
   void functional_launch(kernel_info_t *k) {
     m_functional_sim = true;
     m_functional_sim_kernel = k;
