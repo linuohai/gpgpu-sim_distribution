@@ -2406,13 +2406,22 @@ void tensor_core::issue(register_set &source_reg) {
 unsigned pipelined_simd_unit::get_active_lanes_in_pipeline() {
   active_mask_t active_lanes;
   active_lanes.reset();
-  if (m_core->get_gpu()->get_config().g_power_simulation_enabled) {
-    for (unsigned stage = 0; (stage + 1) < m_pipeline_depth; stage++) {
-      if (!m_pipeline_reg[stage]->empty())
-        active_lanes |= m_pipeline_reg[stage]->get_active_mask();
-    }
+  const gpgpu_sim *gpu = m_core->get_gpu();
+  const gpgpu_sim_config &config = gpu->get_config();
+  if (!config.g_power_simulation_enabled && !config.l1_trace_enabled())
+    return 0;
+
+  for (unsigned stage = 0; (stage + 1) < m_pipeline_depth; stage++) {
+    if (!m_pipeline_reg[stage]->empty())
+      active_lanes |= m_pipeline_reg[stage]->get_active_mask();
   }
-  return active_lanes.count();
+  unsigned active_count = active_lanes.count();
+  if (active_count && gpu->l1_trace_debug_enabled()) {
+    fprintf(stderr,
+            "[l1-trace-debug] SM %u unit %s active lanes reported = %u\n",
+            m_core->get_sid(), get_name(), active_count);
+  }
+  return active_count;
 }
 
 void ldst_unit::active_lanes_in_pipeline() {
@@ -2431,7 +2440,7 @@ void sp_unit::active_lanes_in_pipeline() {
 void dp_unit::active_lanes_in_pipeline() {
   unsigned active_count = pipelined_simd_unit::get_active_lanes_in_pipeline();
   assert(active_count <= m_core->get_config()->warp_size);
-  // m_core->incspactivelanes_stat(active_count);
+  m_core->incdpactivelanes_stat(active_count);
   m_core->incfuactivelanes_stat(active_count);
   m_core->incfumemactivelanes_stat(active_count);
 }
@@ -2446,7 +2455,7 @@ void specialized_unit::active_lanes_in_pipeline() {
 void int_unit::active_lanes_in_pipeline() {
   unsigned active_count = pipelined_simd_unit::get_active_lanes_in_pipeline();
   assert(active_count <= m_core->get_config()->warp_size);
-  m_core->incspactivelanes_stat(active_count);
+  m_core->incintactivelanes_stat(active_count);
   m_core->incfuactivelanes_stat(active_count);
   m_core->incfumemactivelanes_stat(active_count);
 }
@@ -2461,6 +2470,7 @@ void sfu::active_lanes_in_pipeline() {
 void tensor_core::active_lanes_in_pipeline() {
   unsigned active_count = pipelined_simd_unit::get_active_lanes_in_pipeline();
   assert(active_count <= m_core->get_config()->warp_size);
+  m_core->inctensorcoreactivelanes_stat(active_count);
   m_core->incsfuactivelanes_stat(active_count);
   m_core->incfuactivelanes_stat(active_count);
   m_core->incfumemactivelanes_stat(active_count);

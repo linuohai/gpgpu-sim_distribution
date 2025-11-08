@@ -707,6 +707,9 @@ void gpgpu_sim_config::reg_options(option_parser_t opp) {
                          "Enable per-lane L1 cache tracing", "0");
   option_parser_register(opp, "-l1_trace_path", OPT_CSTR, &m_l1_trace_path,
                          "CSV output path for L1 cache trace", "");
+  option_parser_register(opp, "-l1_trace_debug", OPT_BOOL, &m_l1_trace_debug,
+                         "Verbose debug logging for L1 trace ALU counters",
+                         "0");
   option_parser_register(
       opp, "-gpgpu_deadlock_detect", OPT_BOOL, &gpu_deadlock_detect,
       "Stop the simulation at deadlock (1=on (default), 0=off)", "1");
@@ -1019,6 +1022,54 @@ gpgpu_sim::gpgpu_sim(const gpgpu_sim_config &config, gpgpu_context *ctx)
   partiton_replys_in_parallel_total = 0;
   m_last_hbm_bandwidth_gbps = 0.0;
   m_last_hbm_occupancy = 0.0;
+  m_theoretical_hbm_bandwidth_bytes_per_sec = 0.0;
+  unsigned warp_size = m_shader_config->warp_size;
+  unsigned num_shader = m_shader_config->num_shader();
+  unsigned total_alu_units =
+      m_shader_config->gpgpu_num_sp_units +
+      m_shader_config->gpgpu_num_int_units +
+      m_shader_config->gpgpu_num_dp_units +
+      m_shader_config->gpgpu_num_sfu_units +
+      m_shader_config->gpgpu_num_tensor_core_units;
+  // Specialized units (BRA/TEX/TENSOR entries in trace.config) reuse the SP
+  // execution pipelines and already contribute to m_active_* counters.  We
+  // therefore leave them out of the denominator to avoid double-counting lane
+  // capacity here.
+  if (total_alu_units == 0) total_alu_units = 1;
+  m_total_alu_lanes = total_alu_units * warp_size;
+  if (m_config.l1_trace_debug_enabled()) {
+    fprintf(stderr,
+            "[l1-trace-debug] lane capacity: warp=%u sp=%u int=%u dp=%u sfu=%u "
+            "tensor=%u (specialized units ignored=%u) -> total_units=%u "
+            "total_lanes=%u\n",
+            warp_size, m_shader_config->gpgpu_num_sp_units,
+            m_shader_config->gpgpu_num_int_units,
+            m_shader_config->gpgpu_num_dp_units,
+            m_shader_config->gpgpu_num_sfu_units,
+            m_shader_config->gpgpu_num_tensor_core_units,
+            m_shader_config->m_specialized_unit_num, total_alu_units,
+            m_total_alu_lanes);
+  }
+  m_prev_active_sp_lanes.assign(num_shader, 0ULL);
+  m_prev_active_int_lanes.assign(num_shader, 0ULL);
+  m_prev_active_dp_lanes.assign(num_shader, 0ULL);
+  m_prev_active_sfu_lanes.assign(num_shader, 0ULL);
+  m_prev_active_tensor_lanes.assign(num_shader, 0ULL);
+  m_prev_active_fu_lanes.assign(num_shader, 0ULL);
+  m_last_active_sp_lanes.assign(num_shader, 0);
+  m_last_active_int_lanes.assign(num_shader, 0);
+  m_last_active_dp_lanes.assign(num_shader, 0);
+  m_last_active_sfu_lanes.assign(num_shader, 0);
+  m_last_active_tensor_lanes.assign(num_shader, 0);
+  m_last_active_alu_lanes.assign(num_shader, 0);
+  m_last_alu_utilization.assign(num_shader, 0.0);
+  if (m_config.dram_period > 0.0) {
+    double theoretical_bytes_per_cycle =
+        (static_cast<double>(m_memory_config->m_n_mem_sub_partition)/2)*
+        static_cast<double>(m_memory_config->dram_atom_size);
+    m_theoretical_hbm_bandwidth_bytes_per_sec =
+        theoretical_bytes_per_cycle / m_config.dram_period;
+  }
   last_streamID = -1;
 
   gpu_kernel_time.clear();
@@ -1242,6 +1293,85 @@ void gpgpu_sim::init() {
   }
 
   if (g_network_mode) icnt_init();
+}
+
+void gpgpu_sim::update_alu_utilization() {
+  if (m_last_active_alu_lanes.empty()) return;
+  unsigned num_shader = m_shader_config->num_shader();
+  unsigned max_lanes = m_total_alu_lanes;
+  unsigned sp_capacity = get_total_sp_lanes();
+  unsigned int_capacity = get_total_int_lanes();
+  unsigned dp_capacity = get_total_dp_lanes();
+  unsigned sfu_capacity = get_total_sfu_lanes();
+  unsigned tensor_capacity = get_total_tensor_lanes();
+  auto compute_delta = [](unsigned long long current,
+                          unsigned long long &previous,
+                          unsigned capacity) -> unsigned {
+    unsigned long long delta = 0;
+    if (current >= previous)
+      delta = current - previous;
+    else
+      delta = current;  // counter reset
+    previous = current;
+    if (capacity == 0) return 0;
+    if (delta > capacity) delta = capacity;
+    return static_cast<unsigned>(delta);
+  };
+  for (unsigned sid = 0; sid < num_shader; ++sid) {
+    unsigned long long current_fu =
+        static_cast<unsigned long long>(m_shader_stats->m_active_fu_lanes[sid]);
+    unsigned delta =
+        compute_delta(current_fu, m_prev_active_fu_lanes[sid], max_lanes);
+    unsigned raw_sp = compute_delta(
+        static_cast<unsigned long long>(m_shader_stats->m_active_sp_lanes[sid]),
+        m_prev_active_sp_lanes[sid], sp_capacity);
+    unsigned raw_int = compute_delta(
+        static_cast<unsigned long long>(m_shader_stats->m_active_int_lanes[sid]),
+        m_prev_active_int_lanes[sid], int_capacity);
+    unsigned raw_dp = compute_delta(
+        static_cast<unsigned long long>(m_shader_stats->m_active_dp_lanes[sid]),
+        m_prev_active_dp_lanes[sid], dp_capacity);
+    unsigned raw_tensor = compute_delta(
+        m_shader_stats->m_active_tensor_core_lanes
+            ? static_cast<unsigned long long>(
+                  m_shader_stats->m_active_tensor_core_lanes[sid])
+            : 0ULL,
+        m_prev_active_tensor_lanes[sid], tensor_capacity);
+    unsigned raw_sfu = compute_delta(
+        static_cast<unsigned long long>(m_shader_stats->m_active_sfu_lanes[sid]),
+        m_prev_active_sfu_lanes[sid], sfu_capacity);
+    unsigned adj_sfu = (raw_sfu > raw_tensor) ? (raw_sfu - raw_tensor) : 0;
+
+    m_last_active_sp_lanes[sid] = raw_sp;
+    m_last_active_int_lanes[sid] = raw_int;
+    m_last_active_dp_lanes[sid] = raw_dp;
+    m_last_active_tensor_lanes[sid] = raw_tensor;
+    m_last_active_sfu_lanes[sid] = adj_sfu;
+
+    if (max_lanes > 0) {
+      m_last_active_alu_lanes[sid] = delta;
+      double util =
+          static_cast<double>(delta) / static_cast<double>(max_lanes);
+      if (util > 1.0) util = 1.0;
+      m_last_alu_utilization[sid] = util;
+      if (m_config.l1_trace_debug_enabled()) {
+        fprintf(stderr,
+                "[l1-trace-debug] update_alu sid=%u current_fu=%llu delta=%u "
+                "max=%u util=%.6f (sp=%u int=%u dp=%u sfu=%u tensor=%u)\n",
+                sid, current_fu, delta, max_lanes, util, raw_sp, raw_int, raw_dp,
+                adj_sfu, raw_tensor);
+      }
+    } else {
+      m_last_active_alu_lanes[sid] = 0;
+      m_last_alu_utilization[sid] = 0.0;
+      if (m_config.l1_trace_debug_enabled()) {
+        fprintf(stderr,
+                "[l1-trace-debug] update_alu sid=%u has no configured ALU "
+                "lanes, forcing counts to zero.\n",
+                sid);
+      }
+    }
+  }
 }
 
 void gpgpu_sim::update_stats() {
@@ -2014,24 +2144,17 @@ void gpgpu_sim::cycle() {
     }
   }
   partiton_replys_in_parallel += partiton_replys_in_parallel_per_cycle;
-  if (clock_mask & ICNT) {
-    double bytes = static_cast<double>(partiton_replys_in_parallel_per_cycle) *
-                   m_memory_config->dram_atom_size;
-    double period = m_config.icnt_period;
-    if (period > 0.0) {
-      m_last_hbm_bandwidth_gbps = bytes / period / 1.0e9;
-    } else {
-      m_last_hbm_bandwidth_gbps = 0.0;
-    }
-  }
 
   if (clock_mask & DRAM) {
+    unsigned long long dram_bytes_transferred = 0;
     for (unsigned i = 0; i < m_memory_config->m_n_mem; i++) {
       if (m_memory_config->simple_dram_model)
         m_memory_partition_unit[i]->simple_dram_model_cycle();
       else
         m_memory_partition_unit[i]
             ->dram_cycle();  // Issue the dram command (scheduler + delay model)
+      dram_bytes_transferred +=
+          m_memory_partition_unit[i]->flush_dram_bus_bytes();
       // Update performance counters for DRAM
       if (m_config.g_power_simulation_enabled) {
         m_memory_partition_unit[i]->set_dram_power_stats(
@@ -2045,6 +2168,22 @@ void gpgpu_sim::cycle() {
             m_power_stats->pwr_mem_stat->n_wr_WB[CURRENT_STAT_IDX][i],
             m_power_stats->pwr_mem_stat->n_req[CURRENT_STAT_IDX][i]);
       }
+    }
+    double period = m_config.dram_period;
+    if (period > 0.0) {
+      double bandwidth_bytes_per_sec =
+          static_cast<double>(dram_bytes_transferred) / period;
+      m_last_hbm_bandwidth_gbps = bandwidth_bytes_per_sec / 1.0e9;
+      if (m_theoretical_hbm_bandwidth_bytes_per_sec > 0.0) {
+        m_last_hbm_occupancy =
+            bandwidth_bytes_per_sec / m_theoretical_hbm_bandwidth_bytes_per_sec;
+        if (m_last_hbm_occupancy > 1.0) m_last_hbm_occupancy = 1.0;
+      } else {
+        m_last_hbm_occupancy = 0.0;
+      }
+    } else {
+      m_last_hbm_bandwidth_gbps = 0.0;
+      m_last_hbm_occupancy = 0.0;
     }
   }
 
@@ -2076,15 +2215,6 @@ void gpgpu_sim::cycle() {
     partiton_reqs_in_parallel_util += partiton_reqs_in_parallel_per_cycle;
     gpu_sim_cycle_parition_util++;
   }
-  if (clock_mask & L2) {
-    if (m_memory_config->m_n_mem_sub_partition) {
-      m_last_hbm_occupancy =
-          static_cast<double>(partiton_reqs_in_parallel_per_cycle) /
-          static_cast<double>(m_memory_config->m_n_mem_sub_partition);
-    } else {
-      m_last_hbm_occupancy = 0.0;
-    }
-  }
 
   if (clock_mask & ICNT) {
     icnt_transfer();
@@ -2110,6 +2240,7 @@ void gpgpu_sim::cycle() {
           gpu_occupancy.aggregate_warp_slot_filled,
           gpu_occupancy.aggregate_theoretical_warp_slots);
     }
+    update_alu_utilization();
     float temp = 0;
     for (unsigned i = 0; i < m_shader_config->num_shader(); i++) {
       temp += m_shader_stats->m_pipeline_duty_cycle[i];

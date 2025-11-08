@@ -2008,8 +2008,30 @@ enum cache_request_status l1_cache::access(new_addr_type addr, mem_fetch *mf,
       m_gpu ? (m_gpu->gpu_tot_sim_cycle + m_gpu->gpu_sim_cycle) : 0ULL;
   double hbm_bw = m_gpu ? m_gpu->get_last_hbm_bandwidth_gbps() : 0.0;
   double hbm_occ = m_gpu ? m_gpu->get_last_hbm_occupancy() : 0.0;
+  unsigned active_alu =
+      m_gpu ? m_gpu->get_last_active_alu_lanes(mf->get_sid()) : 0;
+  unsigned total_alu = m_gpu ? m_gpu->get_total_alu_lanes() : 0;
+  unsigned active_sp =
+      m_gpu ? m_gpu->get_last_active_sp_lanes(mf->get_sid()) : 0;
+  unsigned total_sp = m_gpu ? m_gpu->get_total_sp_lanes() : 0;
+  unsigned active_int =
+      m_gpu ? m_gpu->get_last_active_int_lanes(mf->get_sid()) : 0;
+  unsigned total_int = m_gpu ? m_gpu->get_total_int_lanes() : 0;
+  unsigned active_dp =
+      m_gpu ? m_gpu->get_last_active_dp_lanes(mf->get_sid()) : 0;
+  unsigned total_dp = m_gpu ? m_gpu->get_total_dp_lanes() : 0;
+  unsigned active_sfu =
+      m_gpu ? m_gpu->get_last_active_sfu_lanes(mf->get_sid()) : 0;
+  unsigned total_sfu = m_gpu ? m_gpu->get_total_sfu_lanes() : 0;
+  unsigned active_tensor =
+      m_gpu ? m_gpu->get_last_active_tensor_lanes(mf->get_sid()) : 0;
+  unsigned total_tensor = m_gpu ? m_gpu->get_total_tensor_lanes() : 0;
   l1_tracer::emit(mf->get_sid(), mf->get_wid(), mf, status, cycle,
-                  m_config.get_line_sz(), hbm_bw, hbm_occ);
+                  m_config.get_line_sz(), hbm_bw, hbm_occ, active_alu,
+                  total_alu, active_sp, total_sp, active_int, total_int,
+                  active_dp, total_dp, active_sfu, total_sfu, active_tensor,
+                  total_tensor);
+                
   return status;
 }
 

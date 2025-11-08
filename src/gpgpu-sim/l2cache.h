@@ -110,6 +110,8 @@ class memory_partition_unit {
     return m_gpu;
   }
 
+  unsigned long long flush_dram_bus_bytes();
+
  private:
   unsigned m_id;
   const memory_config *m_config;
@@ -156,6 +158,12 @@ class memory_partition_unit {
   };
   std::list<dram_delay_t> m_dram_latency_queue;
 
+  void accumulate_dram_bytes(unsigned bytes) {
+    m_dram_bytes_this_cycle += bytes;
+  }
+  unsigned request_bytes(const mem_fetch *mf) const;
+
+  unsigned long long m_dram_bytes_this_cycle;
   class gpgpu_sim *m_gpu;
 };
 

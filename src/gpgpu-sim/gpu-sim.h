@@ -413,6 +413,9 @@ class gpgpu_sim_config : public power_config,
       : m_shader_config(ctx), m_memory_config(ctx) {
     m_valid = false;
     gpgpu_ctx = ctx;
+    m_l1_trace_enable = false;
+    m_l1_trace_path = NULL;
+    m_l1_trace_debug = false;
   }
   void reg_options(class OptionParser *opp);
   void init() {
@@ -472,6 +475,7 @@ class gpgpu_sim_config : public power_config,
   const char *l1_trace_path() const {
     return m_l1_trace_path ? m_l1_trace_path : "";
   }
+  bool l1_trace_debug_enabled() const { return m_l1_trace_debug; }
 
  private:
   void init_clock_domains(void);
@@ -506,6 +510,7 @@ class gpgpu_sim_config : public power_config,
   unsigned max_concurrent_kernel;
   bool m_l1_trace_enable;
   char *m_l1_trace_path;
+  bool m_l1_trace_debug;
 
   // visualizer
   bool g_visualizer_enabled;
@@ -692,6 +697,7 @@ class gpgpu_sim : public gpgpu_t {
   void print_shader_cycle_distro(FILE *fout) const;
 
   void gpgpu_debug();
+  void update_alu_utilization();
 
  protected:
   ///// data /////
@@ -734,6 +740,21 @@ class gpgpu_sim : public gpgpu_t {
   class power_stat_t *m_power_stats;
   class gpgpu_sim_wrapper *m_gpgpusim_wrapper;
   unsigned long long last_gpu_sim_insn;
+  std::vector<unsigned long long> m_prev_active_sp_lanes;
+  std::vector<unsigned long long> m_prev_active_int_lanes;
+  std::vector<unsigned long long> m_prev_active_dp_lanes;
+  std::vector<unsigned long long> m_prev_active_sfu_lanes;
+  std::vector<unsigned long long> m_prev_active_tensor_lanes;
+  std::vector<unsigned long long> m_prev_active_fu_lanes;
+  std::vector<unsigned> m_last_active_sp_lanes;
+  std::vector<unsigned> m_last_active_int_lanes;
+  std::vector<unsigned> m_last_active_dp_lanes;
+  std::vector<unsigned> m_last_active_sfu_lanes;
+  std::vector<unsigned> m_last_active_tensor_lanes;
+  std::vector<unsigned> m_last_active_alu_lanes;
+  std::vector<double> m_last_alu_utilization;
+  unsigned m_total_alu_lanes;
+  double m_theoretical_hbm_bandwidth_bytes_per_sec;
 
   unsigned long long last_liveness_message_time;
 
@@ -807,6 +828,61 @@ class gpgpu_sim : public gpgpu_t {
     return m_last_hbm_bandwidth_gbps;
   }
   double get_last_hbm_occupancy() const { return m_last_hbm_occupancy; }
+  unsigned get_total_alu_lanes() const { return m_total_alu_lanes; }
+  unsigned get_total_sp_lanes() const {
+    return m_shader_config->gpgpu_num_sp_units * m_shader_config->warp_size;
+  }
+  unsigned get_total_int_lanes() const {
+    return m_shader_config->gpgpu_num_int_units * m_shader_config->warp_size;
+  }
+  unsigned get_total_dp_lanes() const {
+    return m_shader_config->gpgpu_num_dp_units * m_shader_config->warp_size;
+  }
+  unsigned get_total_sfu_lanes() const {
+    return m_shader_config->gpgpu_num_sfu_units * m_shader_config->warp_size;
+  }
+  unsigned get_total_tensor_lanes() const {
+    return m_shader_config->gpgpu_num_tensor_core_units *
+           m_shader_config->warp_size;
+  }
+  unsigned get_last_active_alu_lanes(unsigned sid) const {
+    if (sid < m_last_active_alu_lanes.size())
+      return m_last_active_alu_lanes[sid];
+    return 0;
+  }
+  unsigned get_last_active_sp_lanes(unsigned sid) const {
+    if (sid < m_last_active_sp_lanes.size())
+      return m_last_active_sp_lanes[sid];
+    return 0;
+  }
+  unsigned get_last_active_int_lanes(unsigned sid) const {
+    if (sid < m_last_active_int_lanes.size())
+      return m_last_active_int_lanes[sid];
+    return 0;
+  }
+  unsigned get_last_active_dp_lanes(unsigned sid) const {
+    if (sid < m_last_active_dp_lanes.size())
+      return m_last_active_dp_lanes[sid];
+    return 0;
+  }
+  unsigned get_last_active_sfu_lanes(unsigned sid) const {
+    if (sid < m_last_active_sfu_lanes.size())
+      return m_last_active_sfu_lanes[sid];
+    return 0;
+  }
+  unsigned get_last_active_tensor_lanes(unsigned sid) const {
+    if (sid < m_last_active_tensor_lanes.size())
+      return m_last_active_tensor_lanes[sid];
+    return 0;
+  }
+  double get_last_alu_utilization(unsigned sid) const {
+    if (sid < m_last_alu_utilization.size())
+      return m_last_alu_utilization[sid];
+    return 0.0;
+  }
+  bool l1_trace_debug_enabled() const {
+    return m_config.l1_trace_debug_enabled();
+  }
   void functional_launch(kernel_info_t *k) {
     m_functional_sim = true;
     m_functional_sim_kernel = k;

@@ -15,7 +15,13 @@ class l1_tracer {
   static void emit(unsigned sid, unsigned wid, const mem_fetch *mf,
                    enum cache_request_status status,
                    unsigned long long cycle, unsigned line_sz,
-                   double hbm_bandwidth_gbps, double hbm_occupancy);
+                   double hbm_bandwidth_gbps, double hbm_occupancy,
+                   unsigned active_alu_lanes, unsigned total_alu_lanes,
+                   unsigned active_sp_lanes, unsigned total_sp_lanes,
+                   unsigned active_int_lanes, unsigned total_int_lanes,
+                   unsigned active_dp_lanes, unsigned total_dp_lanes,
+                   unsigned active_sfu_lanes, unsigned total_sfu_lanes,
+                   unsigned active_tensor_lanes, unsigned total_tensor_lanes);
   static void flush_all();
 
  private:

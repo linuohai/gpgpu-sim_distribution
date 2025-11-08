@@ -1769,6 +1769,8 @@ struct shader_core_stats_pod {
   double *m_num_imul24_acesses;
   double *m_num_imul32_acesses;
   unsigned *m_active_sp_lanes;
+  unsigned *m_active_int_lanes;
+  unsigned *m_active_dp_lanes;
   unsigned *m_active_sfu_lanes;
   unsigned *m_active_tensor_core_lanes;
   unsigned *m_active_fu_lanes;
@@ -1884,6 +1886,10 @@ class shader_core_stats : public shader_core_stats_pod {
         (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
     m_active_sp_lanes =
         (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
+    m_active_int_lanes =
+        (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
+    m_active_dp_lanes =
+        (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
     m_active_sfu_lanes =
         (unsigned *)calloc(config->num_shader(), sizeof(unsigned));
     m_active_tensor_core_lanes =
@@ -1972,6 +1978,8 @@ class shader_core_stats : public shader_core_stats_pod {
     free(m_num_imul24_acesses);
     free(m_num_imul32_acesses);
     free(m_active_sp_lanes);
+    free(m_active_int_lanes);
+    free(m_active_dp_lanes);
     free(m_active_sfu_lanes);
     free(m_active_tensor_core_lanes);
     free(m_active_fu_lanes);
@@ -2414,9 +2422,27 @@ class shader_core_ctx : public core_t {
     m_stats->m_active_sp_lanes[m_sid] =
         m_stats->m_active_sp_lanes[m_sid] + active_count;
   }
+  void incintactivelanes_stat(unsigned active_count) {
+    if (m_stats->m_active_int_lanes) {
+      m_stats->m_active_int_lanes[m_sid] =
+          m_stats->m_active_int_lanes[m_sid] + active_count;
+    }
+  }
+  void incdpactivelanes_stat(unsigned active_count) {
+    if (m_stats->m_active_dp_lanes) {
+      m_stats->m_active_dp_lanes[m_sid] =
+          m_stats->m_active_dp_lanes[m_sid] + active_count;
+    }
+  }
   void incsfuactivelanes_stat(unsigned active_count) {
     m_stats->m_active_sfu_lanes[m_sid] =
         m_stats->m_active_sfu_lanes[m_sid] + active_count;
+  }
+  void inctensorcoreactivelanes_stat(unsigned active_count) {
+    if (m_stats->m_active_tensor_core_lanes) {
+      m_stats->m_active_tensor_core_lanes[m_sid] =
+          m_stats->m_active_tensor_core_lanes[m_sid] + active_count;
+    }
   }
   void incfuactivelanes_stat(unsigned active_count) {
     m_stats->m_active_fu_lanes[m_sid] =
