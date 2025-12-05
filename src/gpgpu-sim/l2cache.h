@@ -72,6 +72,7 @@ class partition_mf_allocator : public mem_fetch_allocator {
 // - It arbitrates the DRAM channel among multiple sub partitions.
 // - It does not connect directly with the interconnection network.
 class memory_partition_unit {
+  friend class dram_t;
  public:
   memory_partition_unit(unsigned partition_id, const memory_config *config,
                         class memory_stats_t *stats, class gpgpu_sim *gpu);

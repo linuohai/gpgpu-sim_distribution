@@ -253,9 +253,6 @@ void memory_partition_unit::simple_dram_model_cycle() {
           m_sub_partition[dest_spid]->set_done(mf_return);
           delete mf_return;
         } else {
-          if (!mf_return->get_is_write()) {
-            accumulate_dram_bytes(request_bytes(mf_return));
-          }
           m_sub_partition[dest_spid]->dram_L2_queue_push(mf_return);
           mf_return->set_status(
               IN_PARTITION_DRAM_TO_L2_QUEUE,
@@ -290,9 +287,6 @@ void memory_partition_unit::simple_dram_model_cycle() {
       if (m_dram->full(mf->is_write())) break;
 
       m_sub_partition[spid]->L2_dram_queue_pop();
-      if (mf->get_is_write()) {
-        accumulate_dram_bytes(request_bytes(mf));
-      }
       MEMPART_DPRINTF(
           "Issue mem_fetch request %p from sub partition %d to dram\n", mf,
           spid);
@@ -336,9 +330,6 @@ void memory_partition_unit::dram_cycle() {
         m_sub_partition[dest_spid]->set_done(mf_return);
         delete mf_return;
       } else {
-        if (!mf_return->get_is_write()) {
-          accumulate_dram_bytes(request_bytes(mf_return));
-        }
         m_sub_partition[dest_spid]->dram_L2_queue_push(mf_return);
         mf_return->set_status(IN_PARTITION_DRAM_TO_L2_QUEUE,
                               m_gpu->gpu_sim_cycle + m_gpu->gpu_tot_sim_cycle);
@@ -394,9 +385,6 @@ void memory_partition_unit::dram_cycle() {
       !m_dram->full(m_dram_latency_queue.front().req->is_write())) {
     mem_fetch *mf = m_dram_latency_queue.front().req;
     m_dram_latency_queue.pop_front();
-    if (mf->get_is_write()) {
-      accumulate_dram_bytes(request_bytes(mf));
-    }
     m_dram->push(mf);
   }
 }

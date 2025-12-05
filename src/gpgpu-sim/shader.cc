@@ -31,9 +31,15 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include "shader.h"
+#include <algorithm>
+#include <cctype>
 #include <float.h>
 #include <limits.h>
+#include <map>
 #include <string.h>
+#include <sstream>
+#include <string>
+#include <utility>
 #include "../../libcuda/gpgpu_context.h"
 #include "../cuda-sim/cuda-sim.h"
 #include "../cuda-sim/ptx-stats.h"
@@ -43,6 +49,7 @@
 #include "dram.h"
 #include "gpu-misc.h"
 #include "gpu-sim.h"
+#include "issue_tracer.h"
 #include "icnt_wrapper.h"
 #include "mem_fetch.h"
 #include "mem_latency_stat.h"
@@ -54,6 +61,289 @@
 #define PRIORITIZE_MSHR_OVER_WB 1
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
+
+namespace {
+
+const char *op_type_str(op_type op) {
+  switch (op) {
+    case NO_OP:
+      return "NO_OP";
+    case ALU_OP:
+      return "ALU_OP";
+    case SFU_OP:
+      return "SFU_OP";
+    case TENSOR_CORE_OP:
+      return "TENSOR_CORE_OP";
+    case DP_OP:
+      return "DP_OP";
+    case SP_OP:
+      return "SP_OP";
+    case INTP_OP:
+      return "INTP_OP";
+    case ALU_SFU_OP:
+      return "ALU_SFU_OP";
+    case LOAD_OP:
+      return "LOAD_OP";
+    case TENSOR_CORE_LOAD_OP:
+      return "TENSOR_LOAD_OP";
+    case TENSOR_CORE_STORE_OP:
+      return "TENSOR_STORE_OP";
+    case STORE_OP:
+      return "STORE_OP";
+    case BRANCH_OP:
+      return "BRANCH_OP";
+    case BARRIER_OP:
+      return "BARRIER_OP";
+    case MEMORY_BARRIER_OP:
+      return "MEMORY_BARRIER_OP";
+    case CALL_OPS:
+      return "CALL_OP";
+    case RET_OPS:
+      return "RET_OP";
+    case EXIT_OPS:
+      return "EXIT_OP";
+    default:
+      return "SPECIAL_OP";
+  }
+}
+
+std::string addr_space_from_inst(const warp_inst_t *inst) {
+  if (!inst) return std::string();
+  const memory_space_t &space = inst->space;
+  switch (space.get_type()) {
+    case global_space:
+      return "GLOBAL";
+    case shared_space:
+      return "SHARED";
+    case local_space:
+      return "LOCAL";
+    case const_space:
+      return "CONST";
+    case tex_space:
+      return "TEX";
+    case param_space_kernel:
+      return "PARAM_KERNEL";
+    case param_space_local:
+      return "PARAM_LOCAL";
+    default:
+      return std::string();
+  }
+}
+
+std::string format_tuple_string(const std::vector<std::string> &items) {
+  std::ostringstream oss;
+  oss << '(';
+  for (size_t i = 0; i < items.size(); ++i) {
+    if (i) oss << ',';
+    oss << items[i];
+  }
+  oss << ')';
+  return oss.str();
+}
+
+bool collect_issue_sector_info(const warp_inst_t *inst,
+                               const active_mask_t &mask,
+                               std::string *sector_addresses,
+                               std::string *sector_lanes) {
+  if (!inst || !sector_addresses || !sector_lanes) return false;
+  if (!(inst->is_load() || inst->is_store())) return false;
+  if (mask.none()) return false;
+
+  struct sector_record {
+    unsigned first_lane = UINT_MAX;
+    new_addr_type representative_addr = 0;
+  };
+
+  std::map<new_addr_type, sector_record> sectors;
+  const unsigned warp_sz = inst->warp_size();
+  for (unsigned lane = 0; lane < warp_sz; ++lane) {
+    if (!mask.test(lane)) continue;
+    new_addr_type lane_addr = inst->get_addr(lane);
+    new_addr_type sector_key =
+        lane_addr & ~(static_cast<new_addr_type>(SECTOR_SIZE) - 1);
+    sector_record &entry = sectors[sector_key];
+    if (entry.first_lane == UINT_MAX || lane < entry.first_lane) {
+      entry.first_lane = lane;
+      entry.representative_addr = lane_addr;
+    }
+  }
+  if (sectors.empty()) return false;
+
+  std::vector<sector_record> ordered;
+  ordered.reserve(sectors.size());
+  for (const auto &kv : sectors) {
+    ordered.push_back(kv.second);
+  }
+  std::sort(ordered.begin(), ordered.end(),
+            [](const sector_record &lhs, const sector_record &rhs) {
+              if (lhs.first_lane == rhs.first_lane)
+                return lhs.representative_addr < rhs.representative_addr;
+              return lhs.first_lane < rhs.first_lane;
+            });
+
+  auto hex_addr = [](new_addr_type addr) {
+    std::ostringstream oss;
+    oss << "0x" << std::hex << addr << std::dec;
+    return oss.str();
+  };
+
+  std::vector<std::string> addr_tokens;
+  std::vector<std::string> lane_tokens;
+  addr_tokens.reserve(ordered.size());
+  lane_tokens.reserve(ordered.size());
+  for (const auto &entry : ordered) {
+    addr_tokens.push_back(hex_addr(entry.representative_addr));
+    lane_tokens.push_back(std::to_string(entry.first_lane));
+  }
+
+  *sector_addresses = format_tuple_string(addr_tokens);
+  *sector_lanes = format_tuple_string(lane_tokens);
+  return true;
+}
+
+std::string opcode_token(const shader_core_config *config, address_type pc) {
+  if (!config || !config->gpgpu_ctx || !config->gpgpu_ctx->func_sim)
+    return std::string();
+  std::string insn = config->gpgpu_ctx->func_sim->ptx_get_insn_str(pc);
+  size_t start = insn.find_first_not_of(" \t");
+  if (start == std::string::npos) return std::string();
+  std::string trimmed = insn.substr(start);
+  if (!trimmed.empty() && trimmed[0] == '<') return trimmed;
+  size_t end = trimmed.find_first_of(" \t");
+  if (end == std::string::npos) return trimmed;
+  return trimmed.substr(0, end);
+}
+
+std::string opcode_from_inst(const warp_inst_t *inst,
+                             const shader_core_config *config) {
+  if (!inst) return "NA";
+  std::string token;
+  if (inst->pc != static_cast<address_type>(-1)) {
+    token = opcode_token(config, inst->pc);
+  }
+  if (!token.empty() && token[0] != '<') return token;
+  return op_type_str(inst->op);
+}
+
+std::string opcode_from_pc_safe(const shader_core_config *config,
+                                address_type pc) {
+  if (pc == static_cast<address_type>(-1) || config == NULL ||
+      config->gpgpu_ctx == NULL)
+    return "0";
+  std::string token = opcode_token(config, pc);
+  if (!token.empty() && token[0] != '<') return token;
+  if (!token.empty() && token[0] == '<') token.clear();
+  const ptx_instruction *inst = config->gpgpu_ctx->pc_to_instruction(pc);
+  if (inst) {
+    return op_type_str(inst->op);
+  }
+  if (!token.empty()) return token;
+  return "0";
+}
+
+enum class stall_reason_id {
+  MEM_WAIT = 0,
+  REG_WAIT,
+  IBUFFER_EMPTY,
+  BARRIER,
+  CONTROL_HAZARD,
+  PIPE_BUSY,
+  DUAL_ISSUE_RESTRICT
+};
+
+void increment_stall_reason(issue_stall_counts &counts,
+                            stall_reason_id reason) {
+  switch (reason) {
+    case stall_reason_id::MEM_WAIT:
+      counts.mem_wait++;
+      break;
+    case stall_reason_id::REG_WAIT:
+      counts.reg_wait++;
+      break;
+    case stall_reason_id::IBUFFER_EMPTY:
+      counts.ibuffer_empty++;
+      break;
+    case stall_reason_id::BARRIER:
+      counts.barrier++;
+      break;
+    case stall_reason_id::CONTROL_HAZARD:
+      counts.control_hazard++;
+      break;
+    case stall_reason_id::PIPE_BUSY:
+      counts.pipe_busy++;
+      break;
+    case stall_reason_id::DUAL_ISSUE_RESTRICT:
+      counts.dual_issue_restrict++;
+      break;
+  }
+}
+
+std::string single_stall_reason(const issue_stall_counts &counts) {
+  const struct {
+    const char *name;
+    unsigned issue_stall_counts::*member;
+  } reason_map[] = {
+      {"MEM_WAIT", &issue_stall_counts::mem_wait},
+      {"REG_WAIT", &issue_stall_counts::reg_wait},
+      {"IBUFFER_EMPTY", &issue_stall_counts::ibuffer_empty},
+      {"BARRIER", &issue_stall_counts::barrier},
+      {"CONTROL_HAZARD", &issue_stall_counts::control_hazard},
+      {"PIPE_BUSY", &issue_stall_counts::pipe_busy},
+      {"DUAL_ISSUE_RESTRICT", &issue_stall_counts::dual_issue_restrict},
+  };
+  const char *result = NULL;
+  for (const auto &entry : reason_map) {
+    unsigned value = counts.*(entry.member);
+    if (value == 0) continue;
+    if (result) return "NA";
+    result = entry.name;
+  }
+  return result ? std::string(result) : std::string("NA");
+}
+
+struct stall_sample {
+  unsigned warp_id = (unsigned)-1;
+  address_type pc = (address_type)-1;
+  std::string opcode;
+  std::string note;
+  bool has_mask = false;
+  active_mask_t mask;
+};
+
+struct stall_tracker {
+  bool has_ibuffer_empty = false;
+  stall_sample ibuffer_empty;
+  bool has_barrier_wait = false;
+  stall_sample barrier_wait;
+  bool has_control_hazard = false;
+  stall_sample control_hazard;
+  bool has_scoreboard_block = false;
+  bool scoreboard_longop = false;
+  stall_sample scoreboard_block;
+  bool has_pipe_busy = false;
+  bool pipe_busy_is_dual_issue = false;
+  stall_sample pipe_busy;
+};
+
+void capture_sample(bool &flag, stall_sample &sample, unsigned warp_id,
+                    address_type pc, const std::string &opcode,
+                    const active_mask_t *mask = NULL,
+                    const char *note = NULL) {
+  if (flag) return;
+  flag = true;
+  sample.warp_id = warp_id;
+  sample.pc = pc;
+  sample.opcode = opcode.empty() ? "NA" : opcode;
+  sample.note = note ? note : "";
+  if (mask) {
+    sample.mask = *mask;
+    sample.has_mask = true;
+  } else {
+    sample.has_mask = false;
+  }
+}
+
+}  // namespace
 
 mem_fetch *shader_core_mem_fetch_allocator::alloc(
     new_addr_type addr, mem_access_type type, unsigned size, bool wr,
@@ -1051,6 +1341,24 @@ void shader_core_ctx::issue_warp(register_set &pipe_reg_set,
   m_stats->shader_cycle_distro[2 + (*pipe_reg)->active_count()]++;
   func_exec_inst(**pipe_reg);
 
+  if (issue_tracer::enabled() && m_gpu->issue_trace_enabled()) {
+    const warp_inst_t &issued_inst = **pipe_reg;
+    const unsigned long long cycle =
+        m_gpu->gpu_tot_sim_cycle + m_gpu->gpu_sim_cycle;
+    std::string opcode = opcode_from_inst(&issued_inst, m_config);
+    std::string space = addr_space_from_inst(&issued_inst);
+    std::string sector_addresses;
+    std::string sector_lanes;
+    if ((space == "GLOBAL" || space == "LOCAL") &&
+        collect_issue_sector_info(&issued_inst, active_mask, &sector_addresses,
+                                  &sector_lanes)) {
+      // strings populated above
+    }
+    issue_tracer::emit_issue(m_sid, warp_id, sch_id, cycle, active_mask,
+                             opcode, space, issued_inst.pc, sector_addresses,
+                             sector_lanes);
+  }
+
   // Add LDGSTS instructions into a buffer
   unsigned int ldgdepbar_id = m_warp[warp_id]->m_ldgdepbar_id;
   if (next_inst->m_is_ldgsts) {
@@ -1264,6 +1572,35 @@ void scheduler_unit::cycle() {
   bool ready_inst = false;   // of the valid instructions, there was one not
                              // waiting for pending register writes
   bool issued_inst = false;  // of these we issued one
+  bool trace_enabled =
+      issue_tracer::enabled() && m_shader->get_gpu()->issue_trace_enabled();
+  stall_tracker stall_ctx;
+  issue_stall_counts stall_reason_counts;
+  auto record_pipe_busy =
+      [&](unsigned warp_id, address_type pc, const std::string &opcode,
+          const active_mask_t &mask, const char *note,
+          bool due_to_dual_issue = false) {
+        if (!trace_enabled) return;
+        increment_stall_reason(
+            stall_reason_counts,
+            due_to_dual_issue ? stall_reason_id::DUAL_ISSUE_RESTRICT
+                              : stall_reason_id::PIPE_BUSY);
+        bool should_update = false;
+        if (!stall_ctx.has_pipe_busy) {
+          stall_ctx.has_pipe_busy = true;
+          should_update = true;
+        } else if (!due_to_dual_issue && stall_ctx.pipe_busy_is_dual_issue) {
+          should_update = true;
+        }
+        if (!should_update) return;
+        stall_ctx.pipe_busy_is_dual_issue = due_to_dual_issue;
+        stall_ctx.pipe_busy.warp_id = warp_id;
+        stall_ctx.pipe_busy.pc = pc;
+        stall_ctx.pipe_busy.opcode = opcode.empty() ? "NA" : opcode;
+        stall_ctx.pipe_busy.note = note ? note : "";
+        stall_ctx.pipe_busy.mask = mask;
+        stall_ctx.pipe_busy.has_mask = true;
+      };
 
   order_warps();
   for (std::vector<shd_warp_t *>::const_iterator iter =
@@ -1298,6 +1635,24 @@ void scheduler_unit::cycle() {
           "barrier\n",
           (*iter)->get_warp_id(), (*iter)->get_dynamic_warp_id());
 
+    if (trace_enabled && warp(warp_id).ibuffer_empty()) {
+      increment_stall_reason(stall_reason_counts,
+                             stall_reason_id::IBUFFER_EMPTY);
+      address_type warp_pc = warp(warp_id).get_pc();
+      capture_sample(stall_ctx.has_ibuffer_empty, stall_ctx.ibuffer_empty,
+                     warp_id, warp_pc,
+                     opcode_from_pc_safe(m_shader->m_config, warp_pc), NULL,
+                     "instruction buffer empty");
+    }
+    if (trace_enabled && warp(warp_id).waiting()) {
+      increment_stall_reason(stall_reason_counts, stall_reason_id::BARRIER);
+      address_type warp_pc = warp(warp_id).get_pc();
+      capture_sample(stall_ctx.has_barrier_wait, stall_ctx.barrier_wait, warp_id,
+                     warp_pc, opcode_from_pc_safe(m_shader->m_config, warp_pc),
+                     NULL,
+                     "waiting on barrier/membar");
+    }
+
     while (!warp(warp_id).waiting() && !warp(warp_id).ibuffer_empty() &&
            (checked < max_issue) && (checked <= issued) &&
            (issued < max_issue)) {
@@ -1326,18 +1681,28 @@ void scheduler_unit::cycle() {
               "instruction flush\n",
               (*iter)->get_warp_id(), (*iter)->get_dynamic_warp_id());
           // control hazard
+          if (trace_enabled) {
+            increment_stall_reason(stall_reason_counts,
+                                   stall_reason_id::CONTROL_HAZARD);
+            capture_sample(stall_ctx.has_control_hazard,
+                           stall_ctx.control_hazard, warp_id, pc,
+                           opcode_from_pc_safe(m_shader->m_config, pc), NULL,
+                           "control hazard");
+          }
           warp(warp_id).set_next_pc(pc);
           warp(warp_id).ibuffer_flush();
         } else {
           valid_inst = true;
+          std::string inst_opcode;
+          if (trace_enabled)
+            inst_opcode = opcode_from_inst(pI, m_shader->m_config);
+          const active_mask_t &active_mask =
+              m_shader->get_active_mask(warp_id, pI);
           if (!m_scoreboard->checkCollision(warp_id, pI)) {
             SCHED_DPRINTF(
                 "Warp (warp_id %u, dynamic_warp_id %u) passes scoreboard\n",
                 (*iter)->get_warp_id(), (*iter)->get_dynamic_warp_id());
             ready_inst = true;
-
-            const active_mask_t &active_mask =
-                m_shader->get_active_mask(warp_id, pI);
 
             assert(warp(warp_id).inst_in_pipeline());
 
@@ -1345,16 +1710,24 @@ void scheduler_unit::cycle() {
                 (pI->op == MEMORY_BARRIER_OP) ||
                 (pI->op == TENSOR_CORE_LOAD_OP) ||
                 (pI->op == TENSOR_CORE_STORE_OP)) {
-              if (m_mem_out->has_free(m_shader->m_config->sub_core_model,
-                                      m_id) &&
+              bool mem_pipe_avail =
+                  m_mem_out->has_free(m_shader->m_config->sub_core_model, m_id);
+              bool allow_issue =
                   (!diff_exec_units ||
-                   previous_issued_inst_exec_type != exec_unit_type_t::MEM)) {
+                   previous_issued_inst_exec_type != exec_unit_type_t::MEM);
+              if (mem_pipe_avail && allow_issue) {
                 m_shader->issue_warp(*m_mem_out, pI, active_mask, warp_id,
                                      m_id);
                 issued++;
                 issued_inst = true;
                 warp_inst_issued = true;
                 previous_issued_inst_exec_type = exec_unit_type_t::MEM;
+              } else if (!mem_pipe_avail) {
+                record_pipe_busy(warp_id, pI->pc, inst_opcode, active_mask,
+                                 "ldst pipe busy");
+              } else if (!allow_issue) {
+                record_pipe_busy(warp_id, pI->pc, inst_opcode, active_mask,
+                                 "dual issue same unit", true);
               }
             } else {
               // This code need to be refactored
@@ -1427,64 +1800,112 @@ void scheduler_unit::cycle() {
                   issued_inst = true;
                   warp_inst_issued = true;
                   previous_issued_inst_exec_type = exec_unit_type_t::INT;
+                } else {
+                  bool is_sp_candidate =
+                      (m_shader->m_config->gpgpu_num_sp_units > 0) &&
+                      (m_shader->m_config->gpgpu_num_int_units == 0 ||
+                       (m_shader->m_config->gpgpu_num_int_units > 0 &&
+                        pI->op == SP_OP));
+                  bool is_int_candidate =
+                      (m_shader->m_config->gpgpu_num_int_units > 0 &&
+                       pI->op != SP_OP);
+                  if (is_sp_candidate) {
+                    if (sp_pipe_avail && diff_exec_units &&
+                        previous_issued_inst_exec_type ==
+                            exec_unit_type_t::SP) {
+                      record_pipe_busy(warp_id, pI->pc, inst_opcode, active_mask,
+                                       "dual issue same unit", true);
+                    } else if (!sp_pipe_avail) {
+                      record_pipe_busy(warp_id, pI->pc, inst_opcode, active_mask,
+                                       "sp pipe busy");
+                    }
+                  } else if (is_int_candidate) {
+                    if (int_pipe_avail && diff_exec_units &&
+                        previous_issued_inst_exec_type ==
+                            exec_unit_type_t::INT) {
+                      record_pipe_busy(warp_id, pI->pc, inst_opcode, active_mask,
+                                       "dual issue same unit", true);
+                    } else if (!int_pipe_avail) {
+                      record_pipe_busy(warp_id, pI->pc, inst_opcode, active_mask,
+                                       "int pipe busy");
+                    }
+                  }
                 }
               } else if ((m_shader->m_config->gpgpu_num_dp_units > 0) &&
-                         (pI->op == DP_OP) &&
-                         !(diff_exec_units && previous_issued_inst_exec_type ==
-                                                  exec_unit_type_t::DP)) {
+                         (pI->op == DP_OP)) {
                 bool dp_pipe_avail =
                     (m_shader->m_config->gpgpu_num_dp_units > 0) &&
                     m_dp_out->has_free(m_shader->m_config->sub_core_model,
                                        m_id);
+                bool dp_dual_blocked =
+                    diff_exec_units &&
+                    previous_issued_inst_exec_type == exec_unit_type_t::DP;
 
-                if (dp_pipe_avail) {
+                if (dp_pipe_avail && !dp_dual_blocked) {
                   m_shader->issue_warp(*m_dp_out, pI, active_mask, warp_id,
                                        m_id);
                   issued++;
                   issued_inst = true;
                   warp_inst_issued = true;
                   previous_issued_inst_exec_type = exec_unit_type_t::DP;
+                } else if (dp_pipe_avail && dp_dual_blocked) {
+                  record_pipe_busy(warp_id, pI->pc, inst_opcode, active_mask,
+                                   "dual issue same unit", true);
+                } else {
+                  record_pipe_busy(warp_id, pI->pc, inst_opcode, active_mask,
+                                   "dp pipe busy");
                 }
               }  // If the DP units = 0 (like in Fermi archi), then execute DP
                  // inst on SFU unit
               else if (((m_shader->m_config->gpgpu_num_dp_units == 0 &&
                          pI->op == DP_OP) ||
-                        (pI->op == SFU_OP) || (pI->op == ALU_SFU_OP)) &&
-                       !(diff_exec_units && previous_issued_inst_exec_type ==
-                                                exec_unit_type_t::SFU)) {
+                        (pI->op == SFU_OP) || (pI->op == ALU_SFU_OP))) {
                 bool sfu_pipe_avail =
                     (m_shader->m_config->gpgpu_num_sfu_units > 0) &&
                     m_sfu_out->has_free(m_shader->m_config->sub_core_model,
                                         m_id);
+                bool sfu_dual_blocked =
+                    diff_exec_units &&
+                    previous_issued_inst_exec_type == exec_unit_type_t::SFU;
 
-                if (sfu_pipe_avail) {
+                if (sfu_pipe_avail && !sfu_dual_blocked) {
                   m_shader->issue_warp(*m_sfu_out, pI, active_mask, warp_id,
                                        m_id);
                   issued++;
                   issued_inst = true;
                   warp_inst_issued = true;
                   previous_issued_inst_exec_type = exec_unit_type_t::SFU;
+                } else if (sfu_pipe_avail && sfu_dual_blocked) {
+                  record_pipe_busy(warp_id, pI->pc, inst_opcode, active_mask,
+                                   "dual issue same unit", true);
+                } else {
+                  record_pipe_busy(warp_id, pI->pc, inst_opcode, active_mask,
+                                   "sfu pipe busy");
                 }
-              } else if ((pI->op == TENSOR_CORE_OP) &&
-                         !(diff_exec_units && previous_issued_inst_exec_type ==
-                                                  exec_unit_type_t::TENSOR)) {
+              } else if (pI->op == TENSOR_CORE_OP) {
                 bool tensor_core_pipe_avail =
                     (m_shader->m_config->gpgpu_num_tensor_core_units > 0) &&
                     m_tensor_core_out->has_free(
                         m_shader->m_config->sub_core_model, m_id);
+                bool tensor_dual_blocked =
+                    diff_exec_units &&
+                    previous_issued_inst_exec_type == exec_unit_type_t::TENSOR;
 
-                if (tensor_core_pipe_avail) {
+                if (tensor_core_pipe_avail && !tensor_dual_blocked) {
                   m_shader->issue_warp(*m_tensor_core_out, pI, active_mask,
                                        warp_id, m_id);
                   issued++;
                   issued_inst = true;
                   warp_inst_issued = true;
                   previous_issued_inst_exec_type = exec_unit_type_t::TENSOR;
+                } else if (tensor_core_pipe_avail && tensor_dual_blocked) {
+                  record_pipe_busy(warp_id, pI->pc, inst_opcode, active_mask,
+                                   "dual issue same unit", true);
+                } else {
+                  record_pipe_busy(warp_id, pI->pc, inst_opcode, active_mask,
+                                   "tensor pipe busy");
                 }
-              } else if ((pI->op >= SPEC_UNIT_START_ID) &&
-                         !(diff_exec_units &&
-                           previous_issued_inst_exec_type ==
-                               exec_unit_type_t::SPECIALIZED)) {
+              } else if (pI->op >= SPEC_UNIT_START_ID) {
                 unsigned spec_id = pI->op - SPEC_UNIT_START_ID;
                 assert(spec_id < m_shader->m_config->m_specialized_unit.size());
                 register_set *spec_reg_set = m_spec_cores_out[spec_id];
@@ -1493,8 +1914,12 @@ void scheduler_unit::cycle() {
                      0) &&
                     spec_reg_set->has_free(m_shader->m_config->sub_core_model,
                                            m_id);
+                bool spec_dual_blocked =
+                    diff_exec_units &&
+                    previous_issued_inst_exec_type ==
+                        exec_unit_type_t::SPECIALIZED;
 
-                if (spec_pipe_avail) {
+                if (spec_pipe_avail && !spec_dual_blocked) {
                   m_shader->issue_warp(*spec_reg_set, pI, active_mask, warp_id,
                                        m_id);
                   issued++;
@@ -1502,14 +1927,32 @@ void scheduler_unit::cycle() {
                   warp_inst_issued = true;
                   previous_issued_inst_exec_type =
                       exec_unit_type_t::SPECIALIZED;
+                } else if (spec_pipe_avail && spec_dual_blocked) {
+                  record_pipe_busy(warp_id, pI->pc, inst_opcode, active_mask,
+                                   "dual issue same unit", true);
+                } else {
+                  record_pipe_busy(warp_id, pI->pc, inst_opcode, active_mask,
+                                   "specialized pipe busy");
                 }
               }
 
             }  // end of else
-          } else {
+          } else if (trace_enabled) {
             SCHED_DPRINTF(
                 "Warp (warp_id %u, dynamic_warp_id %u) fails scoreboard\n",
                 (*iter)->get_warp_id(), (*iter)->get_dynamic_warp_id());
+            bool waiting_on_mem = m_scoreboard->has_pending_longop(warp_id);
+            bool already = stall_ctx.has_scoreboard_block;
+            increment_stall_reason(
+                stall_reason_counts,
+                waiting_on_mem ? stall_reason_id::MEM_WAIT
+                               : stall_reason_id::REG_WAIT);
+            capture_sample(
+                stall_ctx.has_scoreboard_block, stall_ctx.scoreboard_block,
+                warp_id, pI->pc, inst_opcode, &active_mask,
+                waiting_on_mem ? "waiting on outstanding memory op"
+                               : "waiting on register dependency");
+            if (!already) stall_ctx.scoreboard_longop = waiting_on_mem;
           }
         }
       } else if (valid) {
@@ -1563,6 +2006,39 @@ void scheduler_unit::cycle() {
                                         // to memory)
   else if (!issued_inst)
     m_stats->shader_cycle_distro[2]++;  // pipeline stalled
+
+  if (!issued_inst && trace_enabled) {
+    const stall_sample *sample = NULL;
+    if (!valid_inst) {
+      if (stall_ctx.has_barrier_wait)
+        sample = &stall_ctx.barrier_wait;
+      else if (stall_ctx.has_control_hazard)
+        sample = &stall_ctx.control_hazard;
+      else if (stall_ctx.has_ibuffer_empty)
+        sample = &stall_ctx.ibuffer_empty;
+    } else if (!ready_inst) {
+      if (stall_ctx.has_scoreboard_block)
+        sample = &stall_ctx.scoreboard_block;
+    } else {
+      if (stall_ctx.has_pipe_busy) sample = &stall_ctx.pipe_busy;
+    }
+
+    const active_mask_t *mask_ptr =
+        (sample && sample->has_mask) ? &sample->mask : NULL;
+    int sample_warp = sample ? static_cast<int>(sample->warp_id) : -1;
+    address_type sample_pc =
+        (sample && sample->pc != static_cast<address_type>(-1))
+            ? sample->pc
+            : static_cast<address_type>(-1);
+    std::string opcode_col =
+        (sample && !sample->opcode.empty()) ? sample->opcode : "NA";
+    unsigned long long cycle = m_shader->get_gpu()->gpu_tot_sim_cycle +
+                               m_shader->get_gpu()->gpu_sim_cycle;
+    std::string one_reason = single_stall_reason(stall_reason_counts);
+    issue_tracer::emit_stall(m_shader->get_sid(), sample_warp, cycle, mask_ptr,
+                             opcode_col, std::string(), sample_pc, m_id,
+                             stall_reason_counts, one_reason);
+  }
 }
 
 void scheduler_unit::do_on_warp_issued(

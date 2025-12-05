@@ -30,6 +30,8 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <algorithm>
+
 #include "dram.h"
 #include "dram_sched.h"
 #include "gpu-misc.h"
@@ -291,6 +293,11 @@ void dram_t::cycle() {
   if (!returnq->full()) {
     dram_req_t *cmd = rwq->pop();
     if (cmd) {
+      unsigned remaining_bytes = cmd->nbytes - cmd->dqbytes;
+      assert(remaining_bytes > 0);
+      unsigned bytes_transferred =
+          std::min(m_config->dram_atom_size, remaining_bytes);
+      m_memory_partition_unit->accumulate_dram_bytes(bytes_transferred);
 #ifdef DRAM_VIEWCMD
       printf("\tDQ: BK%d Row:%03x Col:%03x", cmd->bk, cmd->row,
              cmd->col + cmd->dqbytes);

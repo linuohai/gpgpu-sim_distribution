@@ -80,6 +80,11 @@ const bool Scoreboard::islongop(unsigned warp_id, unsigned regnum) {
   return longopregs[warp_id].find(regnum) != longopregs[warp_id].end();
 }
 
+bool Scoreboard::has_pending_longop(unsigned wid) const {
+  if (wid >= longopregs.size()) return false;
+  return !longopregs[wid].empty();
+}
+
 void Scoreboard::reserveRegisters(const class warp_inst_t* inst) {
   for (unsigned r = 0; r < MAX_OUTPUT_VALUES; r++) {
     if (inst->out[r] > 0) {

@@ -416,6 +416,8 @@ class gpgpu_sim_config : public power_config,
     m_l1_trace_enable = false;
     m_l1_trace_path = NULL;
     m_l1_trace_debug = false;
+    m_issue_trace_enable = false;
+    m_issue_trace_path = NULL;
   }
   void reg_options(class OptionParser *opp);
   void init() {
@@ -476,6 +478,13 @@ class gpgpu_sim_config : public power_config,
     return m_l1_trace_path ? m_l1_trace_path : "";
   }
   bool l1_trace_debug_enabled() const { return m_l1_trace_debug; }
+  bool issue_trace_enabled() const {
+    return m_issue_trace_enable && m_issue_trace_path &&
+           m_issue_trace_path[0] != '\0';
+  }
+  const char *issue_trace_path() const {
+    return m_issue_trace_path ? m_issue_trace_path : "";
+  }
 
  private:
   void init_clock_domains(void);
@@ -511,6 +520,8 @@ class gpgpu_sim_config : public power_config,
   bool m_l1_trace_enable;
   char *m_l1_trace_path;
   bool m_l1_trace_debug;
+  bool m_issue_trace_enable;
+  char *m_issue_trace_path;
 
   // visualizer
   bool g_visualizer_enabled;
@@ -883,6 +894,7 @@ class gpgpu_sim : public gpgpu_t {
   bool l1_trace_debug_enabled() const {
     return m_config.l1_trace_debug_enabled();
   }
+  bool issue_trace_enabled() const { return m_config.issue_trace_enabled(); }
   void functional_launch(kernel_info_t *k) {
     m_functional_sim = true;
     m_functional_sim_kernel = k;

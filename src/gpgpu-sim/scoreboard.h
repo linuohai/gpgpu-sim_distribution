@@ -49,6 +49,7 @@ class Scoreboard {
   bool pendingWrites(unsigned wid) const;
   void printContents() const;
   const bool islongop(unsigned warp_id, unsigned regnum);
+  bool has_pending_longop(unsigned wid) const;
 
  private:
   void reserveRegister(unsigned wid, unsigned regnum);
