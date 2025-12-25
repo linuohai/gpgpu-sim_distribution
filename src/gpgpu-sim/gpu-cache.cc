@@ -35,6 +35,7 @@
 #include "gpu-sim.h"
 #include "hashing.h"
 #include "l1_tracer.h"
+#include "l2_tracer.h"
 #include "stat-tool.h"
 
 // used to allocate memory that is large enough to adapt the changes in cache
@@ -1978,19 +1979,32 @@ enum cache_request_status data_cache::process_tag_probe(
 enum cache_request_status data_cache::access(new_addr_type addr, mem_fetch *mf,
                                              unsigned time,
                                              std::list<cache_event> &events) {
+  return access(addr, mf, time, events, nullptr);
+}
+
+enum cache_request_status data_cache::access(new_addr_type addr, mem_fetch *mf,
+                                             unsigned time,
+                                             std::list<cache_event> &events,
+                                             enum cache_request_status *probe_status) {
   assert(mf->get_data_size() <= m_config.get_atom_sz());
   bool wr = mf->get_is_write();
   new_addr_type block_addr = m_config.block_addr(addr);
   unsigned cache_index = (unsigned)-1;
-  enum cache_request_status probe_status =
+  enum cache_request_status probe_status_value =
       m_tag_array->probe(block_addr, cache_index, mf, mf->is_write(), true);
+  if (probe_status) {
+    *probe_status = probe_status_value;
+  }
   enum cache_request_status access_status =
-      process_tag_probe(wr, probe_status, addr, cache_index, mf, time, events);
+      process_tag_probe(wr, probe_status_value, addr, cache_index, mf, time,
+                        events);
   m_stats.inc_stats(mf->get_access_type(),
-                    m_stats.select_stats_status(probe_status, access_status),
+                    m_stats.select_stats_status(probe_status_value,
+                                                access_status),
                     mf->get_streamID());
   m_stats.inc_stats_pw(mf->get_access_type(),
-                       m_stats.select_stats_status(probe_status, access_status),
+                       m_stats.select_stats_status(probe_status_value,
+                                                   access_status),
                        mf->get_streamID());
   return access_status;
 }
@@ -2002,8 +2016,11 @@ enum cache_request_status data_cache::access(new_addr_type addr, mem_fetch *mf,
 enum cache_request_status l1_cache::access(new_addr_type addr, mem_fetch *mf,
                                            unsigned time,
                                            std::list<cache_event> &events) {
+  enum cache_request_status probe_status = RESERVATION_FAIL;
   enum cache_request_status status =
-      data_cache::access(addr, mf, time, events);
+      data_cache::access(addr, mf, time, events, &probe_status);
+  enum cache_request_status trace_status =
+      m_stats.select_stats_status(probe_status, status);
   unsigned long long cycle =
       m_gpu ? (m_gpu->gpu_tot_sim_cycle + m_gpu->gpu_sim_cycle) : 0ULL;
   double hbm_bw = m_gpu ? m_gpu->get_last_hbm_bandwidth_gbps() : 0.0;
@@ -2026,7 +2043,7 @@ enum cache_request_status l1_cache::access(new_addr_type addr, mem_fetch *mf,
   unsigned active_tensor =
       m_gpu ? m_gpu->get_last_active_tensor_lanes(mf->get_sid()) : 0;
   unsigned total_tensor = m_gpu ? m_gpu->get_total_tensor_lanes() : 0;
-  l1_tracer::emit(mf->get_sid(), mf->get_wid(), mf, status, cycle,
+  l1_tracer::emit(mf->get_sid(), mf->get_wid(), mf, trace_status, cycle,
                   m_config.get_line_sz(), hbm_bw, hbm_occ, active_alu,
                   total_alu, active_sp, total_sp, active_int, total_int,
                   active_dp, total_dp, active_sfu, total_sfu, active_tensor,
@@ -2041,7 +2058,39 @@ enum cache_request_status l1_cache::access(new_addr_type addr, mem_fetch *mf,
 enum cache_request_status l2_cache::access(new_addr_type addr, mem_fetch *mf,
                                            unsigned time,
                                            std::list<cache_event> &events) {
-  return data_cache::access(addr, mf, time, events);
+  enum cache_request_status probe_status = RESERVATION_FAIL;
+  enum cache_request_status status =
+      data_cache::access(addr, mf, time, events, &probe_status);
+  enum cache_request_status trace_status =
+      m_stats.select_stats_status(probe_status, status);
+  unsigned long long cycle =
+      m_gpu ? (m_gpu->gpu_tot_sim_cycle + m_gpu->gpu_sim_cycle) : 0ULL;
+  double hbm_bw = m_gpu ? m_gpu->get_last_hbm_bandwidth_gbps() : 0.0;
+  double hbm_occ = m_gpu ? m_gpu->get_last_hbm_occupancy() : 0.0;
+  unsigned active_alu =
+      m_gpu ? m_gpu->get_last_active_alu_lanes(mf->get_sid()) : 0;
+  unsigned total_alu = m_gpu ? m_gpu->get_total_alu_lanes() : 0;
+  unsigned active_sp =
+      m_gpu ? m_gpu->get_last_active_sp_lanes(mf->get_sid()) : 0;
+  unsigned total_sp = m_gpu ? m_gpu->get_total_sp_lanes() : 0;
+  unsigned active_int =
+      m_gpu ? m_gpu->get_last_active_int_lanes(mf->get_sid()) : 0;
+  unsigned total_int = m_gpu ? m_gpu->get_total_int_lanes() : 0;
+  unsigned active_dp =
+      m_gpu ? m_gpu->get_last_active_dp_lanes(mf->get_sid()) : 0;
+  unsigned total_dp = m_gpu ? m_gpu->get_total_dp_lanes() : 0;
+  unsigned active_sfu =
+      m_gpu ? m_gpu->get_last_active_sfu_lanes(mf->get_sid()) : 0;
+  unsigned total_sfu = m_gpu ? m_gpu->get_total_sfu_lanes() : 0;
+  unsigned active_tensor =
+      m_gpu ? m_gpu->get_last_active_tensor_lanes(mf->get_sid()) : 0;
+  unsigned total_tensor = m_gpu ? m_gpu->get_total_tensor_lanes() : 0;
+  l2_tracer::emit(mf->get_sid(), mf->get_wid(), mf, trace_status, cycle,
+                  m_config.get_line_sz(), hbm_bw, hbm_occ, active_alu,
+                  total_alu, active_sp, total_sp, active_int, total_int,
+                  active_dp, total_dp, active_sfu, total_sfu, active_tensor,
+                  total_tensor);
+  return status;
 }
 
 /// Access function for tex_cache

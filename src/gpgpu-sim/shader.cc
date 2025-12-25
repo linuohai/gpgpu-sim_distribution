@@ -2884,7 +2884,8 @@ unsigned pipelined_simd_unit::get_active_lanes_in_pipeline() {
   active_lanes.reset();
   const gpgpu_sim *gpu = m_core->get_gpu();
   const gpgpu_sim_config &config = gpu->get_config();
-  if (!config.g_power_simulation_enabled && !config.l1_trace_enabled())
+  if (!config.g_power_simulation_enabled && !config.l1_trace_enabled() &&
+      !config.l2_trace_compute_enabled())
     return 0;
 
   for (unsigned stage = 0; (stage + 1) < m_pipeline_depth; stage++) {

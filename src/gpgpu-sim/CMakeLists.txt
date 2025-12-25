@@ -10,6 +10,7 @@ list(APPEND gpgpusim_SRC addrdec.cc
     icnt_wrapper.cc
     issue_tracer.cc
     l1_tracer.cc
+    l2_tracer.cc
     l2cache.cc
     local_interconnect.cc
     mem_fetch.cc

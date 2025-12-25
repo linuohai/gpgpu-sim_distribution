@@ -416,8 +416,13 @@ class gpgpu_sim_config : public power_config,
     m_l1_trace_enable = false;
     m_l1_trace_path = NULL;
     m_l1_trace_debug = false;
+    m_l2_trace_enable = false;
+    m_l2_trace_path = NULL;
+    m_l2_trace_print_bw = true;
+    m_l2_trace_print_compute = true;
     m_issue_trace_enable = false;
     m_issue_trace_path = NULL;
+    m_trace_model = false;
   }
   void reg_options(class OptionParser *opp);
   void init() {
@@ -478,6 +483,20 @@ class gpgpu_sim_config : public power_config,
     return m_l1_trace_path ? m_l1_trace_path : "";
   }
   bool l1_trace_debug_enabled() const { return m_l1_trace_debug; }
+  bool l2_trace_enabled() const {
+    return m_trace_model && m_l2_trace_enable && m_l2_trace_path &&
+           m_l2_trace_path[0] != '\0';
+  }
+  const char *l2_trace_path() const {
+    return m_l2_trace_path ? m_l2_trace_path : "";
+  }
+  bool l2_trace_print_bw() const { return m_l2_trace_print_bw; }
+  bool l2_trace_print_compute() const { return m_l2_trace_print_compute; }
+  bool l2_trace_compute_enabled() const {
+    return l2_trace_enabled() && m_l2_trace_print_compute;
+  }
+  bool trace_model_enabled() const { return m_trace_model; }
+  void set_trace_model(bool enable) { m_trace_model = enable; }
   bool issue_trace_enabled() const {
     return m_issue_trace_enable && m_issue_trace_path &&
            m_issue_trace_path[0] != '\0';
@@ -520,6 +539,11 @@ class gpgpu_sim_config : public power_config,
   bool m_l1_trace_enable;
   char *m_l1_trace_path;
   bool m_l1_trace_debug;
+  bool m_l2_trace_enable;
+  char *m_l2_trace_path;
+  bool m_l2_trace_print_bw;
+  bool m_l2_trace_print_compute;
+  bool m_trace_model;
   bool m_issue_trace_enable;
   char *m_issue_trace_path;
 

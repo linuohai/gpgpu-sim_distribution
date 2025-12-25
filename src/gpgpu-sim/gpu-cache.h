@@ -1580,6 +1580,11 @@ class data_cache : public baseline_cache {
                                            std::list<cache_event> &events);
 
  protected:
+  enum cache_request_status access(new_addr_type addr, mem_fetch *mf,
+                                   unsigned time,
+                                   std::list<cache_event> &events,
+                                   enum cache_request_status *probe_status);
+
   data_cache(const char *name, cache_config &config, int core_id, int type_id,
              mem_fetch_interface *memport, mem_fetch_allocator *mfcreator,
              enum mem_fetch_status status, tag_array *new_tag_array,

@@ -52,6 +52,7 @@
 #include "icnt_wrapper.h"
 #include "issue_tracer.h"
 #include "l1_tracer.h"
+#include "l2_tracer.h"
 #include "l2cache.h"
 #include "shader.h"
 #include "stat-tool.h"
@@ -711,6 +712,17 @@ void gpgpu_sim_config::reg_options(option_parser_t opp) {
   option_parser_register(opp, "-l1_trace_debug", OPT_BOOL, &m_l1_trace_debug,
                          "Verbose debug logging for L1 trace ALU counters",
                          "0");
+  option_parser_register(opp, "-l2_trace_enable", OPT_BOOL, &m_l2_trace_enable,
+                         "Enable per-lane L2 cache tracing (trace model only)",
+                         "0");
+  option_parser_register(opp, "-l2_trace_path", OPT_CSTR, &m_l2_trace_path,
+                         "CSV output path for L2 cache trace", "");
+  option_parser_register(
+      opp, "-l2_trace_print_bw", OPT_BOOL, &m_l2_trace_print_bw,
+      "Print HBM bandwidth and occupancy columns in L2 cache trace", "1");
+  option_parser_register(
+      opp, "-l2_trace_print_compute", OPT_BOOL, &m_l2_trace_print_compute,
+      "Print SM compute-unit lane columns in L2 cache trace", "1");
   option_parser_register(opp, "-issue_trace_enable", OPT_BOOL,
                          &m_issue_trace_enable,
                          "Enable SM issue/stall CSV tracing", "0");
@@ -957,6 +969,7 @@ void gpgpu_sim::set_kernel_done(kernel_info_t *kernel) {
   }
   assert(k != m_running_kernels.end());
   l1_tracer::flush_all();
+  l2_tracer::flush_all();
   issue_tracer::flush_all();
 }
 
@@ -1426,6 +1439,7 @@ void gpgpu_sim::print_stats(unsigned long long streamID) {
         "----------\n");
   }
   l1_tracer::flush_all();
+  l2_tracer::flush_all();
   issue_tracer::flush_all();
 }
 

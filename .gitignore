@@ -70,3 +70,5 @@ setup
 .DS_Store
 .DS_store
 __pycache__/
+
+src/coder-read

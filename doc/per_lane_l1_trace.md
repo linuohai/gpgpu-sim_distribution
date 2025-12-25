@@ -17,12 +17,13 @@
 CSV 的第一行会输出列名，后续每条记录的格式如下：
 
 ```
-cycle,sm_id,warp_id,lane_id,op,address,l1_status,pc,hbm_bw_GBps,hbm_occupancy
+cycle,sm_id,warp_id,lane_id,op,space,address,l1_status,pc,hbm_bw_GBps,hbm_occupancy
 ```
 
 - `cycle`：全局模拟周期（`gpu_tot_sim_cycle + gpu_sim_cycle`）。
 - `sm_id` / `warp_id` / `lane_id`：请求来源的 SM、warp 与 lane 编号。
 - `op`：`LD` 表示读，`ST` 表示写，由 `mem_fetch::dbg_is_store()` 决定。
+- `space`：访问地址空间，取值与 issue trace 一致，如 `GLOBAL`、`LOCAL`、`SHARED`、`CONST`、`TEX`、`PARAM_KERNEL`、`PARAM_LOCAL`，未知则为 `NA`。
 - `address`：该 lane 的原始线程地址，以 `0x` 前缀的 16 进制输出。
 - `l1_status`：L1 Cache 访问结果字符串（例如 `HIT`、`MISS`、`RESERVATION_FAIL` 等）。
 - `pc`：触发该访存的 warp 指令 PC，若缺失则输出 `NA`。
