@@ -49,11 +49,15 @@
 #include "dram.h"
 #include "gpu-cache.h"
 #include "gpu-misc.h"
+#include "hbm_partition_tracer.h"
+#include "icnt_tracer.h"
 #include "icnt_wrapper.h"
 #include "issue_tracer.h"
 #include "l1_tracer.h"
+#include "l2_bw_tracer.h"
 #include "l2_tracer.h"
 #include "l2cache.h"
+#include "stall_reason_pc_stats.h"
 #include "shader.h"
 #include "stat-tool.h"
 
@@ -397,6 +401,9 @@ void shader_core_config::reg_options(class OptionParser *opp) {
   option_parser_register(opp, "-gpgpu_perfect_mem", OPT_BOOL,
                          &gpgpu_perfect_mem,
                          "enable perfect memory mode (no cache miss)", "0");
+  option_parser_register(opp, "-gpgpu_perfect_l1d", OPT_BOOL,
+                         &gpgpu_perfect_l1d,
+                         "force eligible global reads to L1D HIT", "0");
   option_parser_register(
       opp, "-n_regfile_gating_group", OPT_UINT32, &n_regfile_gating_group,
       "group of lanes that should be read/written together)", "4");
@@ -634,7 +641,7 @@ void shader_core_config::reg_options(class OptionParser *opp) {
       "1");
   option_parser_register(
       opp, "-gpgpu_scheduler", OPT_CSTR, &gpgpu_scheduler_string,
-      "Scheduler configuration: < lrr | gto | two_level_active > "
+      "Scheduler configuration: < lrr | gto | two_level_active | n_level > "
       "If "
       "two_level_active:<num_active_warps>:<inner_prioritization>:<outer_"
       "prioritization>"
@@ -642,6 +649,14 @@ void shader_core_config::reg_options(class OptionParser *opp) {
       "scheduler_prioritization_type"
       "Default: gto",
       "gto");
+  option_parser_register(
+      opp, "-gpgpu_n_level_warp_alloc_file", OPT_CSTR,
+      &gpgpu_n_level_warp_alloc_file,
+      "CSV path for n_level warp grouping and time slices", "");
+  option_parser_register(
+      opp, "-gpgpu_n_level_default_scheduler", OPT_CSTR,
+      &gpgpu_n_level_default_scheduler_string,
+      "Default scheduler when n_level config is missing or incomplete", "gto");
 
   option_parser_register(
       opp, "-gpgpu_concurrent_kernel_sm", OPT_BOOL, &gpgpu_concurrent_kernel_sm,
@@ -712,6 +727,12 @@ void gpgpu_sim_config::reg_options(option_parser_t opp) {
   option_parser_register(opp, "-l1_trace_debug", OPT_BOOL, &m_l1_trace_debug,
                          "Verbose debug logging for L1 trace ALU counters",
                          "0");
+  option_parser_register(
+      opp, "-l1_trace_print_bw", OPT_BOOL, &m_l1_trace_print_bw,
+      "Print HBM bandwidth and occupancy columns in L1 cache trace", "0");
+  option_parser_register(
+      opp, "-l1_trace_print_compute", OPT_BOOL, &m_l1_trace_print_compute,
+      "Print SM compute-unit lane columns in L1 cache trace", "0");
   option_parser_register(opp, "-l2_trace_enable", OPT_BOOL, &m_l2_trace_enable,
                          "Enable per-lane L2 cache tracing (trace model only)",
                          "0");
@@ -729,6 +750,45 @@ void gpgpu_sim_config::reg_options(option_parser_t opp) {
   option_parser_register(opp, "-issue_trace_path", OPT_CSTR,
                          &m_issue_trace_path,
                          "CSV output path for issue/stall trace", "");
+  option_parser_register(opp, "-stall_reason_pc_stats_enable", OPT_BOOL,
+                         &m_stall_reason_pc_stats_enable,
+                         "Enable lightweight stall reason PC stats", "0");
+  option_parser_register(opp, "-stall_reason_pc_stats_path", OPT_CSTR,
+                         &m_stall_reason_pc_stats_path,
+                         "Output directory for stall reason PC stats CSV", "");
+  option_parser_register(opp, "-stall_reason_pc_stats_topk", OPT_UINT32,
+                         &m_stall_reason_pc_stats_topk,
+                         "Top-K per reason for stall reason PC stats (0=off)",
+                         "0");
+  option_parser_register(opp, "-icnt_trace_enable", OPT_BOOL,
+                         &m_icnt_trace_enable,
+                         "Enable ICNT transfer bandwidth CSV tracing", "0");
+  option_parser_register(opp, "-icnt_trace_path", OPT_CSTR, &m_icnt_trace_path,
+                         "CSV output path for ICNT transfer bandwidth trace",
+                         "");
+  option_parser_register(opp, "-icnt_trace_period", OPT_UINT32,
+                         &m_icnt_trace_period,
+                         "Sampling period in ICNT cycles for ICNT trace",
+                         "500");
+  option_parser_register(opp, "-l2_bw_enable", OPT_BOOL, &m_l2_bw_enable,
+                         "Enable L2 data/fill port bandwidth CSV tracing",
+                         "0");
+  option_parser_register(opp, "-l2_bw_path", OPT_CSTR, &m_l2_bw_path,
+                         "CSV output path for L2 bandwidth trace", "");
+  option_parser_register(opp, "-l2_bw_period", OPT_UINT32, &m_l2_bw_period,
+                         "Sampling period in L2 cycles for L2 bandwidth trace",
+                         "500");
+  option_parser_register(opp, "-hbm_partition_trace_enable", OPT_BOOL,
+                         &m_hbm_partition_trace_enable,
+                         "Enable DRAM partition bandwidth CSV tracing", "0");
+  option_parser_register(opp, "-hbm_partition_trace_path", OPT_CSTR,
+                         &m_hbm_partition_trace_path,
+                         "CSV output path for DRAM partition bandwidth trace",
+                         "");
+  option_parser_register(opp, "-hbm_partition_trace_period", OPT_UINT32,
+                         &m_hbm_partition_trace_period,
+                         "Sampling period in DRAM cycles for partition trace",
+                         "1");
   option_parser_register(
       opp, "-gpgpu_deadlock_detect", OPT_BOOL, &gpu_deadlock_detect,
       "Stop the simulation at deadlock (1=on (default), 0=off)", "1");
@@ -971,6 +1031,9 @@ void gpgpu_sim::set_kernel_done(kernel_info_t *kernel) {
   l1_tracer::flush_all();
   l2_tracer::flush_all();
   issue_tracer::flush_all();
+  icnt_tracer::flush();
+  l2_bw_tracer::flush();
+  hbm_partition_tracer::flush();
 }
 
 void gpgpu_sim::stop_all_running_kernels() {
@@ -1126,9 +1189,31 @@ gpgpu_sim::gpgpu_sim(const gpgpu_sim_config &config, gpgpu_context *ctx)
   m_running_kernels.resize(config.max_concurrent_kernel, NULL);
   m_last_issued_kernel = 0;
   l1_tracer::init(m_config.l1_trace_enabled(), m_config.l1_trace_path(),
-                  m_config.num_shader());
+                  m_config.num_shader(), m_config.l1_trace_print_bw(),
+                  m_config.l1_trace_print_compute());
   issue_tracer::init(m_config.issue_trace_enabled(),
                      m_config.issue_trace_path(), m_config.num_shader());
+  stall_reason_pc_stats::init(m_config.stall_reason_pc_stats_enabled(),
+                              m_config.stall_reason_pc_stats_path(),
+                              m_config.stall_reason_pc_stats_topk());
+  icnt_tracer::init(m_config.icnt_trace_enabled(), m_config.icnt_trace_path(),
+                    m_shader_config->n_simt_clusters,
+                    m_memory_config->m_n_mem_sub_partition, m_config.icnt_period,
+                    m_config.icnt_trace_period(),
+                    ::icnt_get_flit_size ? ::icnt_get_flit_size() : 0);
+  unsigned l2_port_width_bytes = 0;
+  if (m_memory_config->m_n_mem_sub_partition > 0 && m_memory_sub_partition &&
+      m_memory_sub_partition[0]) {
+    l2_port_width_bytes = m_memory_sub_partition[0]->get_L2_data_port_width();
+  }
+  l2_bw_tracer::init(m_config.l2_bw_enabled(), m_config.l2_bw_path(),
+                     m_memory_config->m_n_mem_sub_partition,
+                     l2_port_width_bytes, m_config.l2_period,
+                     m_config.l2_bw_period());
+  hbm_partition_tracer::init(
+      m_config.hbm_partition_trace_enabled(),
+      m_config.hbm_partition_trace_path(), m_memory_config->m_n_mem,
+      m_config.hbm_partition_trace_period());
   m_last_cluster_issue = m_shader_config->n_simt_clusters -
                          1;  // this causes first launch to use simt cluster 0
   *average_pipeline_duty_cycle = 0;
@@ -1441,6 +1526,8 @@ void gpgpu_sim::print_stats(unsigned long long streamID) {
   l1_tracer::flush_all();
   l2_tracer::flush_all();
   issue_tracer::flush_all();
+  stall_reason_pc_stats::dump();
+  hbm_partition_tracer::flush();
 }
 
 void gpgpu_sim::deadlock_check() {
@@ -2173,14 +2260,24 @@ void gpgpu_sim::cycle() {
 
   if (clock_mask & DRAM) {
     unsigned long long dram_bytes_transferred = 0;
+    const bool hbm_partition_trace_enabled =
+        m_config.hbm_partition_trace_enabled();
+    std::vector<unsigned long long> dram_partition_bytes;
+    if (hbm_partition_trace_enabled) {
+      dram_partition_bytes.assign(m_memory_config->m_n_mem, 0);
+    }
     for (unsigned i = 0; i < m_memory_config->m_n_mem; i++) {
       if (m_memory_config->simple_dram_model)
         m_memory_partition_unit[i]->simple_dram_model_cycle();
       else
         m_memory_partition_unit[i]
             ->dram_cycle();  // Issue the dram command (scheduler + delay model)
-      dram_bytes_transferred +=
+      unsigned long long flushed_bytes =
           m_memory_partition_unit[i]->flush_dram_bus_bytes();
+      dram_bytes_transferred += flushed_bytes;
+      if (hbm_partition_trace_enabled) {
+        dram_partition_bytes[i] = flushed_bytes;
+      }
       // Update performance counters for DRAM
       if (m_config.g_power_simulation_enabled) {
         m_memory_partition_unit[i]->set_dram_power_stats(
@@ -2215,6 +2312,21 @@ void gpgpu_sim::cycle() {
       m_last_hbm_bandwidth_gbps = 0.0;
       m_last_hbm_occupancy = 0.0;
     }
+    if (hbm_partition_trace_enabled) {
+      std::vector<double> part_bw_gbps;
+      part_bw_gbps.reserve(dram_partition_bytes.size());
+      if (period > 0.0) {
+        for (unsigned i = 0; i < dram_partition_bytes.size(); ++i) {
+          double bw = static_cast<double>(dram_partition_bytes[i]) / period;
+          part_bw_gbps.push_back(bw / 1.0e9);
+        }
+      } else {
+        part_bw_gbps.assign(dram_partition_bytes.size(), 0.0);
+      }
+      hbm_partition_tracer::emit(gpu_sim_cycle + gpu_tot_sim_cycle,
+                                 m_last_hbm_bandwidth_gbps,
+                                 m_last_hbm_occupancy, part_bw_gbps);
+    }
   }
 
   // L2 operations follow L2 clock domain
@@ -2239,6 +2351,11 @@ void gpgpu_sim::cycle() {
             m_power_stats->pwr_mem_stat->l2_cache_stats[CURRENT_STAT_IDX]);
       }
     }
+    if (l2_bw_tracer::enabled()) {
+      l2_bw_tracer::on_l2_tick(gpu_sim_cycle + gpu_tot_sim_cycle,
+                               m_memory_sub_partition,
+                               m_memory_config->m_n_mem_sub_partition);
+    }
   }
   partiton_reqs_in_parallel += partiton_reqs_in_parallel_per_cycle;
   if (partiton_reqs_in_parallel_per_cycle > 0) {
@@ -2248,6 +2365,13 @@ void gpgpu_sim::cycle() {
 
   if (clock_mask & ICNT) {
     icnt_transfer();
+    if (icnt_tracer::enabled()) {
+      unsigned req_packets = 0;
+      unsigned reply_packets = 0;
+      icnt_get_last_transfer_packets(&req_packets, &reply_packets);
+      icnt_tracer::on_icnt_tick(gpu_sim_cycle + gpu_tot_sim_cycle, req_packets,
+                                reply_packets);
+    }
   }
 
   if (clock_mask & CORE) {

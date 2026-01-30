@@ -8,10 +8,14 @@ list(APPEND gpgpusim_SRC addrdec.cc
     hashing.cc
     histogram.cc
     icnt_wrapper.cc
+    icnt_tracer.cc
+    hbm_partition_tracer.cc
     issue_tracer.cc
     l1_tracer.cc
+    l2_bw_tracer.cc
     l2_tracer.cc
     l2cache.cc
+    stall_reason_pc_stats.cc
     local_interconnect.cc
     mem_fetch.cc
     mem_latency_stat.cc

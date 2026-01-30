@@ -11,7 +11,11 @@ struct issue_stall_counts {
   unsigned mem_wait = 0;
   unsigned reg_wait = 0;
   unsigned ibuffer_empty = 0;
-  unsigned barrier = 0;
+  unsigned wait_cta_barrier = 0;
+  unsigned wait_membar = 0;
+  unsigned wait_atomic = 0;
+  unsigned wait_ldgsts = 0;
+  unsigned wait_done = 0;
   unsigned control_hazard = 0;
   unsigned pipe_busy = 0;
   unsigned dual_issue_restrict = 0;
@@ -19,19 +23,21 @@ struct issue_stall_counts {
 
 class issue_tracer {
  public:
- static void init(bool enable, const char *path, unsigned n_sms);
+  static void init(bool enable, const char *path, unsigned n_sms);
   static void emit_issue(unsigned sid, unsigned wid, unsigned sch_id,
-                         unsigned long long cycle, const active_mask_t &mask,
-                         const std::string &opcode,
+                         int warp_group, unsigned long long cycle,
+                         const active_mask_t &mask, const std::string &opcode,
                          const std::string &space, address_type pc,
                          const std::string &sector_addresses,
-                         const std::string &sector_lane_ids);
-  static void emit_stall(unsigned sid, int sample_warp,
+                         const std::string &sector_lane_ids,
+                         double hbm_bandwidth_gbps, double hbm_occupancy);
+  static void emit_stall(unsigned sid, int sample_warp, int warp_group,
                          unsigned long long cycle, const active_mask_t *mask,
                          const std::string &opcode,
                          const std::string &space, address_type pc,
                          int scheduler_id, const issue_stall_counts &counts,
-                         const std::string &one_reason);
+                         const std::string &one_reason,
+                         double hbm_bandwidth_gbps, double hbm_occupancy);
   static void flush_all();
   static bool enabled() { return s_enabled; }
 

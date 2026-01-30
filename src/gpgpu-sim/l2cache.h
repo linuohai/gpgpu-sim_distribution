@@ -205,6 +205,7 @@ class memory_sub_partition {
 
   void accumulate_L2cache_stats(class cache_stats &l2_stats) const;
   void get_L2cache_sub_stats(struct cache_sub_stats &css) const;
+  unsigned get_L2_data_port_width() const;
 
   // Support for getting per-window L2 stats for AerialVision
   void get_L2cache_sub_stats_pw(struct cache_sub_stats_pw &css) const;

@@ -2052,6 +2052,7 @@ void cuda_sim::set_param_gpgpu_num_shaders(int num_shaders) {
 
 const struct gpgpu_ptx_sim_info *ptx_sim_kernel_info(
     const function_info *kernel) {
+  assert(kernel && "ptx_sim_kernel_info: kernel is NULL");
   return kernel->get_kernel_info();
 }
 

@@ -33,6 +33,7 @@
 #include "shader.h"
 #include <algorithm>
 #include <cctype>
+#include <fstream>
 #include <float.h>
 #include <limits.h>
 #include <map>
@@ -54,6 +55,7 @@
 #include "mem_fetch.h"
 #include "mem_latency_stat.h"
 #include "shader_trace.h"
+#include "stall_reason_pc_stats.h"
 #include "stat-tool.h"
 #include "traffic_breakdown.h"
 #include "visualizer.h"
@@ -63,6 +65,110 @@
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
 namespace {
+
+std::string trim(const std::string &value) {
+  size_t start = 0;
+  while (start < value.size() &&
+         std::isspace(static_cast<unsigned char>(value[start]))) {
+    ++start;
+  }
+  size_t end = value.size();
+  while (end > start &&
+         std::isspace(static_cast<unsigned char>(value[end - 1]))) {
+    --end;
+  }
+  return value.substr(start, end - start);
+}
+
+bool split_top_level_csv(const std::string &line,
+                         std::vector<std::string> *tokens) {
+  tokens->clear();
+  std::string current;
+  int depth = 0;
+  for (size_t i = 0; i < line.size(); ++i) {
+    char c = line[i];
+    if (c == '#' && depth == 0) break;
+    if (c == '(') depth++;
+    if (c == ')') depth--;
+    if (c == ',' && depth == 0) {
+      tokens->push_back(trim(current));
+      current.clear();
+    } else {
+      current.push_back(c);
+    }
+  }
+  if (!current.empty()) {
+    tokens->push_back(trim(current));
+  }
+  return depth == 0;
+}
+
+bool parse_uint(const std::string &text, unsigned *value) {
+  char *end = NULL;
+  unsigned long parsed = strtoul(text.c_str(), &end, 10);
+  if (!end || *end != '\0') return false;
+  *value = static_cast<unsigned>(parsed);
+  return true;
+}
+
+bool parse_paren_list(const std::string &token, std::vector<unsigned> *out) {
+  out->clear();
+  std::string value = trim(token);
+  if (value.empty()) return false;
+  if (value.front() == '(' && value.back() == ')') {
+    value = value.substr(1, value.size() - 2);
+  }
+  std::stringstream ss(value);
+  std::string item;
+  while (std::getline(ss, item, ',')) {
+    std::string trimmed = trim(item);
+    if (trimmed.empty()) continue;
+    unsigned parsed = 0;
+    if (!parse_uint(trimmed, &parsed)) return false;
+    out->push_back(parsed);
+  }
+  return !out->empty();
+}
+
+concrete_scheduler parse_scheduler_config(const std::string &sched_config) {
+  if (sched_config.find("lrr") != std::string::npos)
+    return CONCRETE_SCHEDULER_LRR;
+  if (sched_config.find("two_level_active") != std::string::npos)
+    return CONCRETE_SCHEDULER_TWO_LEVEL_ACTIVE;
+  if (sched_config.find("gto") != std::string::npos)
+    return CONCRETE_SCHEDULER_GTO;
+  if (sched_config.find("rrr") != std::string::npos)
+    return CONCRETE_SCHEDULER_RRR;
+  if (sched_config.find("old") != std::string::npos)
+    return CONCRETE_SCHEDULER_OLDEST_FIRST;
+  if (sched_config.find("warp_limiting") != std::string::npos)
+    return CONCRETE_SCHEDULER_WARP_LIMITING;
+  if (sched_config.find("n_level") != std::string::npos ||
+      sched_config.find("nlevel") != std::string::npos)
+    return CONCRETE_SCHEDULER_N_LEVEL;
+  return NUM_CONCRETE_SCHEDULERS;
+}
+
+const char *scheduler_config_name(concrete_scheduler sched) {
+  switch (sched) {
+    case CONCRETE_SCHEDULER_LRR:
+      return "lrr";
+    case CONCRETE_SCHEDULER_GTO:
+      return "gto";
+    case CONCRETE_SCHEDULER_TWO_LEVEL_ACTIVE:
+      return "two_level_active";
+    case CONCRETE_SCHEDULER_RRR:
+      return "rrr";
+    case CONCRETE_SCHEDULER_WARP_LIMITING:
+      return "warp_limiting";
+    case CONCRETE_SCHEDULER_OLDEST_FIRST:
+      return "oldest_first";
+    case CONCRETE_SCHEDULER_N_LEVEL:
+      return "n_level";
+    default:
+      return "unknown";
+  }
+}
 
 const char *op_type_str(op_type op) {
   switch (op) {
@@ -245,7 +351,11 @@ enum class stall_reason_id {
   MEM_WAIT = 0,
   REG_WAIT,
   IBUFFER_EMPTY,
-  BARRIER,
+  WAIT_CTA_BARRIER,
+  WAIT_MEMBAR,
+  WAIT_ATOMIC,
+  WAIT_LDGSTS,
+  WAIT_DONE,
   CONTROL_HAZARD,
   PIPE_BUSY,
   DUAL_ISSUE_RESTRICT
@@ -263,8 +373,20 @@ void increment_stall_reason(issue_stall_counts &counts,
     case stall_reason_id::IBUFFER_EMPTY:
       counts.ibuffer_empty++;
       break;
-    case stall_reason_id::BARRIER:
-      counts.barrier++;
+    case stall_reason_id::WAIT_CTA_BARRIER:
+      counts.wait_cta_barrier++;
+      break;
+    case stall_reason_id::WAIT_MEMBAR:
+      counts.wait_membar++;
+      break;
+    case stall_reason_id::WAIT_ATOMIC:
+      counts.wait_atomic++;
+      break;
+    case stall_reason_id::WAIT_LDGSTS:
+      counts.wait_ldgsts++;
+      break;
+    case stall_reason_id::WAIT_DONE:
+      counts.wait_done++;
       break;
     case stall_reason_id::CONTROL_HAZARD:
       counts.control_hazard++;
@@ -286,7 +408,11 @@ std::string single_stall_reason(const issue_stall_counts &counts) {
       {"MEM_WAIT", &issue_stall_counts::mem_wait},
       {"REG_WAIT", &issue_stall_counts::reg_wait},
       {"IBUFFER_EMPTY", &issue_stall_counts::ibuffer_empty},
-      {"BARRIER", &issue_stall_counts::barrier},
+      {"WAIT_CTA_BARRIER", &issue_stall_counts::wait_cta_barrier},
+      {"WAIT_MEMBAR", &issue_stall_counts::wait_membar},
+      {"WAIT_ATOMIC", &issue_stall_counts::wait_atomic},
+      {"WAIT_LDGSTS", &issue_stall_counts::wait_ldgsts},
+      {"WAIT_DONE", &issue_stall_counts::wait_done},
       {"CONTROL_HAZARD", &issue_stall_counts::control_hazard},
       {"PIPE_BUSY", &issue_stall_counts::pipe_busy},
       {"DUAL_ISSUE_RESTRICT", &issue_stall_counts::dual_issue_restrict},
@@ -480,18 +606,45 @@ void shader_core_ctx::create_schedulers() {
   // scedulers
   // must currently occur after all inputs have been initialized.
   std::string sched_config = m_config->gpgpu_scheduler_string;
-  const concrete_scheduler scheduler =
-      sched_config.find("lrr") != std::string::npos ? CONCRETE_SCHEDULER_LRR
-      : sched_config.find("two_level_active") != std::string::npos
-          ? CONCRETE_SCHEDULER_TWO_LEVEL_ACTIVE
-      : sched_config.find("gto") != std::string::npos ? CONCRETE_SCHEDULER_GTO
-      : sched_config.find("rrr") != std::string::npos ? CONCRETE_SCHEDULER_RRR
-      : sched_config.find("old") != std::string::npos
-          ? CONCRETE_SCHEDULER_OLDEST_FIRST
-      : sched_config.find("warp_limiting") != std::string::npos
-          ? CONCRETE_SCHEDULER_WARP_LIMITING
-          : NUM_CONCRETE_SCHEDULERS;
+  concrete_scheduler scheduler = parse_scheduler_config(sched_config);
   assert(scheduler != NUM_CONCRETE_SCHEDULERS);
+  m_n_level_state.enabled = false;
+  m_n_level_state.groups.clear();
+  m_n_level_state.time_slices.clear();
+  m_n_level_state.warp_to_group.clear();
+  m_n_level_state.current_group = 0;
+  m_n_level_state.remaining_in_group = 0;
+
+  if (scheduler == CONCRETE_SCHEDULER_N_LEVEL) {
+    bool missing_cfg = false;
+    const n_level_warp_group_config *cfg =
+        m_config->get_n_level_warp_alloc(m_sid);
+    if (cfg) {
+      init_n_level_state(*cfg);
+      if (!m_n_level_state.enabled) {
+        cfg = NULL;
+      }
+    } else {
+      missing_cfg = true;
+    }
+    if (!cfg) {
+      const char *default_sched =
+          m_config->gpgpu_n_level_default_scheduler_string;
+      std::string fallback =
+          (default_sched && default_sched[0] != '\0') ? default_sched : "gto";
+      scheduler = parse_scheduler_config(fallback);
+      if (scheduler == NUM_CONCRETE_SCHEDULERS ||
+          scheduler == CONCRETE_SCHEDULER_N_LEVEL) {
+        scheduler = CONCRETE_SCHEDULER_GTO;
+      }
+      if (missing_cfg && !m_config->m_n_level_warp_alloc.empty()) {
+        fprintf(stderr,
+                "GPGPU-Sim uArch: error - no n_level config for SM %u; "
+                "fallback to %s scheduler\n",
+                m_sid, scheduler_config_name(scheduler));
+      }
+    }
+  }
 
   for (unsigned i = 0; i < m_config->gpgpu_num_sched_per_core; i++) {
     switch (scheduler) {
@@ -543,6 +696,15 @@ void shader_core_ctx::create_schedulers() {
             &m_pipeline_reg[ID_OC_TENSOR_CORE], m_specilized_dispatch_reg,
             &m_pipeline_reg[ID_OC_MEM], i, m_config->gpgpu_scheduler_string));
         break;
+      case CONCRETE_SCHEDULER_N_LEVEL:
+        schedulers.push_back(new n_level_scheduler(
+            m_stats, this, m_scoreboard, m_simt_stack, &m_warp,
+            &m_pipeline_reg[ID_OC_SP], &m_pipeline_reg[ID_OC_DP],
+            &m_pipeline_reg[ID_OC_SFU], &m_pipeline_reg[ID_OC_INT],
+            &m_pipeline_reg[ID_OC_TENSOR_CORE], m_specilized_dispatch_reg,
+            &m_pipeline_reg[ID_OC_MEM], i,
+            m_config->gpgpu_n_level_default_scheduler_string));
+        break;
       default:
         abort();
     };
@@ -556,6 +718,144 @@ void shader_core_ctx::create_schedulers() {
   for (unsigned i = 0; i < m_config->gpgpu_num_sched_per_core; ++i) {
     schedulers[i]->done_adding_supervised_warps();
   }
+}
+
+void shader_core_ctx::init_n_level_state(const n_level_warp_group_config &cfg) {
+  m_n_level_state.enabled = true;
+  m_n_level_state.groups = cfg.groups;
+  m_n_level_state.time_slices = cfg.time_slices;
+
+  if (m_n_level_state.groups.empty() || m_n_level_state.time_slices.empty()) {
+    fprintf(stderr,
+            "GPGPU-Sim uArch: error - n_level config for SM %u has empty "
+            "groups/time_slices; disabling n_level and falling back to "
+            "default scheduler\n",
+            m_sid);
+    m_n_level_state.enabled = false;
+    return;
+  }
+
+  if (m_n_level_state.groups.size() > m_n_level_state.time_slices.size()) {
+    m_n_level_state.groups.resize(m_n_level_state.time_slices.size());
+  } else if (m_n_level_state.time_slices.size() >
+             m_n_level_state.groups.size()) {
+    m_n_level_state.time_slices.resize(m_n_level_state.groups.size());
+  }
+
+  bool has_group = false;
+  for (size_t g = 0; g < m_n_level_state.groups.size(); ++g) {
+    if (!m_n_level_state.groups[g].empty()) {
+      has_group = true;
+      break;
+    }
+  }
+  if (!has_group) {
+    fprintf(stderr,
+            "GPGPU-Sim uArch: error - n_level config for SM %u has no valid "
+            "warp groups; disabling n_level and falling back to default "
+            "scheduler\n",
+            m_sid);
+    m_n_level_state.enabled = false;
+    return;
+  }
+
+  bool any_slice = false;
+  for (size_t g = 0; g < m_n_level_state.time_slices.size(); ++g) {
+    if (m_n_level_state.time_slices[g] > 0) {
+      any_slice = true;
+      break;
+    }
+  }
+  if (!any_slice) {
+    fprintf(stderr,
+            "GPGPU-Sim uArch: error - n_level config for SM %u has all-zero "
+            "time slices; disabling n_level and falling back to default "
+            "scheduler\n",
+            m_sid);
+    m_n_level_state.enabled = false;
+    return;
+  }
+
+  m_n_level_state.warp_to_group.assign(m_config->max_warps_per_shader, -1);
+  for (size_t g = 0; g < m_n_level_state.groups.size(); ++g) {
+    const std::vector<unsigned> &group = m_n_level_state.groups[g];
+    for (size_t i = 0; i < group.size(); ++i) {
+      unsigned warp_id = group[i];
+      if (warp_id >= m_n_level_state.warp_to_group.size()) continue;
+      if (m_n_level_state.warp_to_group[warp_id] != -1) {
+        fprintf(stderr,
+                "GPGPU-Sim uArch: warning - warp %u appears in multiple "
+                "n_level groups on SM %u\n",
+                warp_id, m_sid);
+        continue;
+      }
+      m_n_level_state.warp_to_group[warp_id] = static_cast<int>(g);
+    }
+  }
+
+  m_n_level_state.current_group = 0;
+  m_n_level_state.remaining_in_group = 0;
+  n_level_begin_cycle();
+}
+
+bool shader_core_ctx::n_level_group_has_active_warp(unsigned group_id) const {
+  if (group_id >= m_n_level_state.groups.size()) return false;
+  const std::vector<unsigned> &group = m_n_level_state.groups[group_id];
+  for (size_t i = 0; i < group.size(); ++i) {
+    unsigned warp_id = group[i];
+    if (warp_id >= m_config->max_warps_per_shader) continue;
+    if (!m_warp[warp_id]->done_exit()) return true;
+  }
+  return false;
+}
+
+void shader_core_ctx::n_level_begin_cycle() {
+  if (!m_n_level_state.enabled) return;
+  if (m_n_level_state.groups.empty() || m_n_level_state.time_slices.empty()) {
+    m_n_level_state.enabled = false;
+    return;
+  }
+  if (m_n_level_state.current_group >= m_n_level_state.groups.size()) {
+    m_n_level_state.current_group = 0;
+  }
+  if (m_n_level_state.remaining_in_group > 0) {
+    if (n_level_group_has_active_warp(m_n_level_state.current_group)) return;
+    m_n_level_state.remaining_in_group = 0;
+  }
+
+  size_t group_count = m_n_level_state.groups.size();
+  size_t guard = 0;
+  while (guard < group_count &&
+         (m_n_level_state.time_slices[m_n_level_state.current_group] == 0 ||
+          !n_level_group_has_active_warp(m_n_level_state.current_group))) {
+    m_n_level_state.current_group =
+        (m_n_level_state.current_group + 1) % group_count;
+    ++guard;
+  }
+  if (guard == group_count) return;
+  m_n_level_state.remaining_in_group =
+      m_n_level_state.time_slices[m_n_level_state.current_group];
+}
+
+void shader_core_ctx::n_level_end_cycle() {
+  if (!m_n_level_state.enabled) return;
+  if (m_n_level_state.remaining_in_group == 0) return;
+
+  m_n_level_state.remaining_in_group--;
+  if (m_n_level_state.remaining_in_group > 0) return;
+
+  size_t group_count = m_n_level_state.groups.size();
+  size_t guard = 0;
+  do {
+    m_n_level_state.current_group =
+        (m_n_level_state.current_group + 1) % group_count;
+    ++guard;
+  } while (guard < group_count &&
+           (m_n_level_state.time_slices[m_n_level_state.current_group] == 0 ||
+            !n_level_group_has_active_warp(m_n_level_state.current_group)));
+  if (guard == group_count) return;
+  m_n_level_state.remaining_in_group =
+      m_n_level_state.time_slices[m_n_level_state.current_group];
 }
 
 void shader_core_ctx::create_exec_pipeline() {
@@ -812,8 +1112,11 @@ void shader_core_ctx::reinit(unsigned start_thread, unsigned end_thread,
     m_threadState[i].n_insn = 0;
     m_threadState[i].m_cta_id = -1;
   }
-  for (unsigned i = start_thread / m_config->warp_size;
-       i < end_thread / m_config->warp_size; ++i) {
+  const unsigned warp_size = m_config->warp_size;
+  const unsigned start_warp = start_thread / warp_size;
+  const unsigned end_warp =
+      (end_thread + warp_size - 1) / warp_size;  // ceil(end_thread/warp_size)
+  for (unsigned i = start_warp; i < end_warp; ++i) {
     m_warp[i]->reset();
     m_simt_stack[i]->reset();
   }
@@ -1354,9 +1657,14 @@ void shader_core_ctx::issue_warp(register_set &pipe_reg_set,
                                   &sector_lanes)) {
       // strings populated above
     }
-    issue_tracer::emit_issue(m_sid, warp_id, sch_id, cycle, active_mask,
-                             opcode, space, issued_inst.pc, sector_addresses,
-                             sector_lanes);
+    int warp_group = n_level_enabled()
+                         ? static_cast<int>(n_level_current_group())
+                         : -1;
+    double hbm_bw = m_gpu ? m_gpu->get_last_hbm_bandwidth_gbps() : 0.0;
+    double hbm_occ = m_gpu ? m_gpu->get_last_hbm_occupancy() : 0.0;
+    issue_tracer::emit_issue(m_sid, warp_id, sch_id, warp_group, cycle,
+                             active_mask, opcode, space, issued_inst.pc,
+                             sector_addresses, sector_lanes, hbm_bw, hbm_occ);
   }
 
   // Add LDGSTS instructions into a buffer
@@ -1436,11 +1744,13 @@ void shader_core_ctx::issue_warp(register_set &pipe_reg_set,
 void shader_core_ctx::issue() {
   // Ensure fair round robin issu between schedulers
   unsigned j;
+  if (m_n_level_state.enabled) n_level_begin_cycle();
   for (unsigned i = 0; i < schedulers.size(); i++) {
     j = (Issue_Prio + i) % schedulers.size();
     schedulers[j]->cycle();
   }
   Issue_Prio = (Issue_Prio + 1) % schedulers.size();
+  if (m_n_level_state.enabled) n_level_end_cycle();
 
   // really is issue;
   // for (unsigned i = 0; i < schedulers.size(); i++) {
@@ -1574,12 +1884,32 @@ void scheduler_unit::cycle() {
   bool issued_inst = false;  // of these we issued one
   bool trace_enabled =
       issue_tracer::enabled() && m_shader->get_gpu()->issue_trace_enabled();
+  bool stats_enabled = stall_reason_pc_stats::enabled();
   stall_tracker stall_ctx;
   issue_stall_counts stall_reason_counts;
+  struct stall_reason_pc_entry {
+    stall_reason_pc_stats::reason reason;
+    address_type pc;
+  };
+  std::vector<stall_reason_pc_entry> pending_reason_pcs;
+  if (stats_enabled) pending_reason_pcs.reserve(32);
+  auto record_stall_reason_pc =
+      [&](stall_reason_pc_stats::reason reason, address_type pc) {
+        if (!stats_enabled) return;
+        pending_reason_pcs.push_back({reason, pc});
+      };
   auto record_pipe_busy =
       [&](unsigned warp_id, address_type pc, const std::string &opcode,
           const active_mask_t &mask, const char *note,
           bool due_to_dual_issue = false) {
+        if (!trace_enabled && !stats_enabled) return;
+        if (stats_enabled) {
+          record_stall_reason_pc(
+              due_to_dual_issue
+                  ? stall_reason_pc_stats::reason::DUAL_ISSUE_RESTRICT
+                  : stall_reason_pc_stats::reason::PIPE_BUSY,
+              pc);
+        }
         if (!trace_enabled) return;
         increment_stall_reason(
             stall_reason_counts,
@@ -1624,18 +1954,26 @@ void scheduler_unit::cycle() {
                                                  // units (as in Maxwell and
                                                  // Pascal)
 
-    if (warp(warp_id).ibuffer_empty())
+    bool ibuffer_empty = warp(warp_id).ibuffer_empty();
+    auto wait_kind = warp(warp_id).waiting_kind();
+    bool waiting = wait_kind != shd_warp_t::wait_kind::NONE;
+
+    if (ibuffer_empty)
       SCHED_DPRINTF(
           "Warp (warp_id %u, dynamic_warp_id %u) fails as ibuffer_empty\n",
           (*iter)->get_warp_id(), (*iter)->get_dynamic_warp_id());
 
-    if (warp(warp_id).waiting())
+    if (waiting)
       SCHED_DPRINTF(
-          "Warp (warp_id %u, dynamic_warp_id %u) fails as waiting for "
-          "barrier\n",
+          "Warp (warp_id %u, dynamic_warp_id %u) fails as waiting\n",
           (*iter)->get_warp_id(), (*iter)->get_dynamic_warp_id());
 
-    if (trace_enabled && warp(warp_id).ibuffer_empty()) {
+    if (stats_enabled && ibuffer_empty) {
+      address_type warp_pc = warp(warp_id).get_pc();
+      record_stall_reason_pc(stall_reason_pc_stats::reason::IBUFFER_EMPTY,
+                             warp_pc);
+    }
+    if (trace_enabled && ibuffer_empty) {
       increment_stall_reason(stall_reason_counts,
                              stall_reason_id::IBUFFER_EMPTY);
       address_type warp_pc = warp(warp_id).get_pc();
@@ -1644,13 +1982,51 @@ void scheduler_unit::cycle() {
                      opcode_from_pc_safe(m_shader->m_config, warp_pc), NULL,
                      "instruction buffer empty");
     }
-    if (trace_enabled && warp(warp_id).waiting()) {
-      increment_stall_reason(stall_reason_counts, stall_reason_id::BARRIER);
+    if ((stats_enabled || trace_enabled) && waiting) {
       address_type warp_pc = warp(warp_id).get_pc();
-      capture_sample(stall_ctx.has_barrier_wait, stall_ctx.barrier_wait, warp_id,
-                     warp_pc, opcode_from_pc_safe(m_shader->m_config, warp_pc),
-                     NULL,
-                     "waiting on barrier/membar");
+      stall_reason_pc_stats::reason stats_reason =
+          stall_reason_pc_stats::reason::WAIT_CTA_BARRIER;
+      stall_reason_id trace_reason = stall_reason_id::WAIT_CTA_BARRIER;
+      const char *note = "waiting";
+      switch (wait_kind) {
+        case shd_warp_t::wait_kind::DONE:
+          stats_reason = stall_reason_pc_stats::reason::WAIT_DONE;
+          trace_reason = stall_reason_id::WAIT_DONE;
+          note = "waiting: warp done";
+          break;
+        case shd_warp_t::wait_kind::CTA_BARRIER:
+          stats_reason = stall_reason_pc_stats::reason::WAIT_CTA_BARRIER;
+          trace_reason = stall_reason_id::WAIT_CTA_BARRIER;
+          note = "waiting: CTA barrier";
+          break;
+        case shd_warp_t::wait_kind::MEMBAR:
+          stats_reason = stall_reason_pc_stats::reason::WAIT_MEMBAR;
+          trace_reason = stall_reason_id::WAIT_MEMBAR;
+          note = "waiting: membar";
+          break;
+        case shd_warp_t::wait_kind::ATOMIC:
+          stats_reason = stall_reason_pc_stats::reason::WAIT_ATOMIC;
+          trace_reason = stall_reason_id::WAIT_ATOMIC;
+          note = "waiting: outstanding atomic";
+          break;
+        case shd_warp_t::wait_kind::LDGSTS:
+          stats_reason = stall_reason_pc_stats::reason::WAIT_LDGSTS;
+          trace_reason = stall_reason_id::WAIT_LDGSTS;
+          note = "waiting: ldgsts/depbar";
+          break;
+        case shd_warp_t::wait_kind::NONE:
+          break;
+      }
+      if (stats_enabled) {
+        record_stall_reason_pc(stats_reason, warp_pc);
+      }
+      if (trace_enabled) {
+        increment_stall_reason(stall_reason_counts, trace_reason);
+        capture_sample(stall_ctx.has_barrier_wait, stall_ctx.barrier_wait,
+                       warp_id, warp_pc,
+                       opcode_from_pc_safe(m_shader->m_config, warp_pc), NULL,
+                       note);
+      }
     }
 
     while (!warp(warp_id).waiting() && !warp(warp_id).ibuffer_empty() &&
@@ -1688,6 +2064,10 @@ void scheduler_unit::cycle() {
                            stall_ctx.control_hazard, warp_id, pc,
                            opcode_from_pc_safe(m_shader->m_config, pc), NULL,
                            "control hazard");
+          }
+          if (stats_enabled) {
+            record_stall_reason_pc(
+                stall_reason_pc_stats::reason::CONTROL_HAZARD, pc);
           }
           warp(warp_id).set_next_pc(pc);
           warp(warp_id).ibuffer_flush();
@@ -1937,22 +2317,31 @@ void scheduler_unit::cycle() {
               }
 
             }  // end of else
-          } else if (trace_enabled) {
+          } else {
             SCHED_DPRINTF(
                 "Warp (warp_id %u, dynamic_warp_id %u) fails scoreboard\n",
                 (*iter)->get_warp_id(), (*iter)->get_dynamic_warp_id());
             bool waiting_on_mem = m_scoreboard->has_pending_longop(warp_id);
-            bool already = stall_ctx.has_scoreboard_block;
-            increment_stall_reason(
-                stall_reason_counts,
-                waiting_on_mem ? stall_reason_id::MEM_WAIT
-                               : stall_reason_id::REG_WAIT);
-            capture_sample(
-                stall_ctx.has_scoreboard_block, stall_ctx.scoreboard_block,
-                warp_id, pI->pc, inst_opcode, &active_mask,
-                waiting_on_mem ? "waiting on outstanding memory op"
-                               : "waiting on register dependency");
-            if (!already) stall_ctx.scoreboard_longop = waiting_on_mem;
+            if (stats_enabled) {
+              record_stall_reason_pc(
+                  waiting_on_mem
+                      ? stall_reason_pc_stats::reason::MEM_WAIT
+                      : stall_reason_pc_stats::reason::REG_WAIT,
+                  pI->pc);
+            }
+            if (trace_enabled) {
+              bool already = stall_ctx.has_scoreboard_block;
+              increment_stall_reason(
+                  stall_reason_counts,
+                  waiting_on_mem ? stall_reason_id::MEM_WAIT
+                                 : stall_reason_id::REG_WAIT);
+              capture_sample(
+                  stall_ctx.has_scoreboard_block, stall_ctx.scoreboard_block,
+                  warp_id, pI->pc, inst_opcode, &active_mask,
+                  waiting_on_mem ? "waiting on outstanding memory op"
+                                 : "waiting on register dependency");
+              if (!already) stall_ctx.scoreboard_longop = waiting_on_mem;
+            }
           }
         }
       } else if (valid) {
@@ -2007,6 +2396,12 @@ void scheduler_unit::cycle() {
   else if (!issued_inst)
     m_stats->shader_cycle_distro[2]++;  // pipeline stalled
 
+  if (!issued_inst && stats_enabled) {
+    for (const auto &entry : pending_reason_pcs) {
+      stall_reason_pc_stats::add(entry.reason, entry.pc, 1);
+    }
+  }
+
   if (!issued_inst && trace_enabled) {
     const stall_sample *sample = NULL;
     if (!valid_inst) {
@@ -2035,9 +2430,16 @@ void scheduler_unit::cycle() {
     unsigned long long cycle = m_shader->get_gpu()->gpu_tot_sim_cycle +
                                m_shader->get_gpu()->gpu_sim_cycle;
     std::string one_reason = single_stall_reason(stall_reason_counts);
-    issue_tracer::emit_stall(m_shader->get_sid(), sample_warp, cycle, mask_ptr,
-                             opcode_col, std::string(), sample_pc, m_id,
-                             stall_reason_counts, one_reason);
+    int warp_group = m_shader->n_level_enabled()
+                         ? static_cast<int>(m_shader->n_level_current_group())
+                         : -1;
+    gpgpu_sim *gpu = m_shader->get_gpu();
+    double hbm_bw = gpu ? gpu->get_last_hbm_bandwidth_gbps() : 0.0;
+    double hbm_occ = gpu ? gpu->get_last_hbm_occupancy() : 0.0;
+    issue_tracer::emit_stall(m_shader->get_sid(), sample_warp, warp_group,
+                             cycle, mask_ptr, opcode_col, std::string(),
+                             sample_pc, m_id, stall_reason_counts, one_reason,
+                             hbm_bw, hbm_occ);
   }
 }
 
@@ -2182,6 +2584,154 @@ void swl_scheduler::order_warps() {
   } else {
     fprintf(stderr, "swl_scheduler m_prioritization = %d\n", m_prioritization);
     abort();
+  }
+}
+
+n_level_scheduler::n_level_scheduler(
+    shader_core_stats *stats, shader_core_ctx *shader, Scoreboard *scoreboard,
+    simt_stack **simt, std::vector<shd_warp_t *> *warp, register_set *sp_out,
+    register_set *dp_out, register_set *sfu_out, register_set *int_out,
+    register_set *tensor_core_out,
+    std::vector<register_set *> &spec_cores_out, register_set *mem_out, int id,
+    const char *default_scheduler_str)
+    : scheduler_unit(stats, shader, scoreboard, simt, warp, sp_out, dp_out,
+                     sfu_out, int_out, tensor_core_out, spec_cores_out, mem_out,
+                     id),
+      m_default_scheduler(CONCRETE_SCHEDULER_GTO),
+      m_last_issued_default_warp_id(-1) {
+  std::string fallback =
+      (default_scheduler_str && default_scheduler_str[0] != '\0')
+          ? default_scheduler_str
+          : "gto";
+  concrete_scheduler parsed = parse_scheduler_config(fallback);
+  if (parsed == NUM_CONCRETE_SCHEDULERS ||
+      parsed == CONCRETE_SCHEDULER_N_LEVEL) {
+    parsed = CONCRETE_SCHEDULER_GTO;
+  }
+  m_default_scheduler = parsed;
+  m_last_issued_warp_id_per_group.assign(m_shader->n_level_groups().size(), -1);
+}
+
+void n_level_scheduler::append_default_warps(
+    const std::vector<shd_warp_t *> &default_warps,
+    std::vector<shd_warp_t *> &result_list) {
+  if (default_warps.empty()) return;
+
+  std::vector<shd_warp_t *> ordered;
+  if (m_default_scheduler == CONCRETE_SCHEDULER_LRR ||
+      m_default_scheduler == CONCRETE_SCHEDULER_RRR) {
+    size_t start = 0;
+    if (m_last_issued_default_warp_id >= 0) {
+      for (size_t i = 0; i < default_warps.size(); ++i) {
+        if (default_warps[i]->get_warp_id() ==
+            static_cast<unsigned>(m_last_issued_default_warp_id)) {
+          start = (i + 1) % default_warps.size();
+          break;
+        }
+      }
+    }
+    for (size_t i = 0; i < default_warps.size(); ++i) {
+      ordered.push_back(default_warps[(start + i) % default_warps.size()]);
+    }
+    result_list.insert(result_list.end(), ordered.begin(), ordered.end());
+    return;
+  }
+
+  if (m_default_scheduler == CONCRETE_SCHEDULER_OLDEST_FIRST) {
+    ordered = default_warps;
+    std::sort(ordered.begin(), ordered.end(),
+              scheduler_unit::sort_warps_by_oldest_dynamic_id);
+    result_list.insert(result_list.end(), ordered.begin(), ordered.end());
+    return;
+  }
+
+  ordered = default_warps;
+  std::sort(ordered.begin(), ordered.end(),
+            scheduler_unit::sort_warps_by_oldest_dynamic_id);
+  shd_warp_t *greedy = NULL;
+  if (m_last_issued_default_warp_id >= 0) {
+    for (size_t i = 0; i < ordered.size(); ++i) {
+      if (ordered[i]->get_warp_id() ==
+          static_cast<unsigned>(m_last_issued_default_warp_id)) {
+        greedy = ordered[i];
+        break;
+      }
+    }
+  }
+  if (greedy) result_list.push_back(greedy);
+  for (size_t i = 0; i < ordered.size(); ++i) {
+    if (ordered[i] != greedy) result_list.push_back(ordered[i]);
+  }
+}
+
+void n_level_scheduler::order_warps() {
+  m_next_cycle_prioritized_warps.clear();
+
+  if (!m_shader->n_level_enabled()) {
+    append_default_warps(m_supervised_warps, m_next_cycle_prioritized_warps);
+    return;
+  }
+
+  const std::vector<std::vector<unsigned>> &groups =
+      m_shader->n_level_groups();
+  if (groups.empty()) return;
+  if (m_last_issued_warp_id_per_group.size() != groups.size()) {
+    m_last_issued_warp_id_per_group.assign(groups.size(), -1);
+  }
+
+  unsigned group_id = m_shader->n_level_current_group();
+  if (group_id >= groups.size()) return;
+
+  const std::vector<unsigned> &group = groups[group_id];
+  std::vector<shd_warp_t *> group_warps;
+  unsigned num_sched = m_shader->get_config()->gpgpu_num_sched_per_core;
+  for (size_t i = 0; i < group.size(); ++i) {
+    unsigned warp_id = group[i];
+    if (warp_id >= m_shader->get_config()->max_warps_per_shader) continue;
+    if ((warp_id % num_sched) != static_cast<unsigned>(m_id)) continue;
+    group_warps.push_back(&warp(warp_id));
+  }
+
+  if (!group_warps.empty()) {
+    size_t start = 0;
+    int last_issued = m_last_issued_warp_id_per_group[group_id];
+    if (last_issued >= 0) {
+      for (size_t i = 0; i < group_warps.size(); ++i) {
+        if (group_warps[i]->get_warp_id() ==
+            static_cast<unsigned>(last_issued)) {
+          start = (i + 1) % group_warps.size();
+          break;
+        }
+      }
+    }
+    for (size_t i = 0; i < group_warps.size(); ++i) {
+      m_next_cycle_prioritized_warps.push_back(
+          group_warps[(start + i) % group_warps.size()]);
+    }
+  }
+
+  std::vector<shd_warp_t *> default_warps;
+  for (size_t i = 0; i < m_supervised_warps.size(); ++i) {
+    shd_warp_t *warp_ptr = m_supervised_warps[i];
+    if (!warp_ptr) continue;
+    int warp_group = m_shader->n_level_group_for_warp(warp_ptr->get_warp_id());
+    if (warp_group < 0) default_warps.push_back(warp_ptr);
+  }
+  append_default_warps(default_warps, m_next_cycle_prioritized_warps);
+}
+
+void n_level_scheduler::do_on_warp_issued(
+    unsigned warp_id, unsigned num_issued,
+    const std::vector<shd_warp_t *>::const_iterator &prioritized_iter) {
+  scheduler_unit::do_on_warp_issued(warp_id, num_issued, prioritized_iter);
+  int group =
+      m_shader->n_level_enabled() ? m_shader->n_level_group_for_warp(warp_id)
+                                  : -1;
+  if (group >= 0 &&
+      group < static_cast<int>(m_last_issued_warp_id_per_group.size())) {
+    m_last_issued_warp_id_per_group[group] = static_cast<int>(warp_id);
+  } else if (group < 0) {
+    m_last_issued_default_warp_id = static_cast<int>(warp_id);
   }
 }
 
@@ -2884,8 +3434,10 @@ unsigned pipelined_simd_unit::get_active_lanes_in_pipeline() {
   active_lanes.reset();
   const gpgpu_sim *gpu = m_core->get_gpu();
   const gpgpu_sim_config &config = gpu->get_config();
-  if (!config.g_power_simulation_enabled && !config.l1_trace_enabled() &&
-      !config.l2_trace_compute_enabled())
+  if (!config.g_power_simulation_enabled &&
+      !config.l1_trace_compute_enabled() &&
+      !config.l2_trace_compute_enabled() &&
+      !config.l1_trace_debug_enabled())
     return 0;
 
   for (unsigned stage = 0; (stage + 1) < m_pipeline_depth; stage++) {
@@ -4003,6 +4555,171 @@ void shader_core_ctx::display_pipeline(FILE *fout, int print_mem,
   }
 }
 
+void shader_core_config::parse_n_level_warp_alloc() {
+  m_n_level_warp_alloc.clear();
+  m_n_level_warp_alloc_loaded = true;
+  bool n_level_requested = false;
+  if (gpgpu_scheduler_string && gpgpu_scheduler_string[0] != '\0') {
+    n_level_requested =
+        (parse_scheduler_config(gpgpu_scheduler_string) ==
+         CONCRETE_SCHEDULER_N_LEVEL);
+  }
+  if (!gpgpu_n_level_warp_alloc_file ||
+      gpgpu_n_level_warp_alloc_file[0] == '\0') {
+    if (n_level_requested) {
+      fprintf(stderr,
+              "GPGPU-Sim uArch: error - n_level scheduler enabled but no "
+              "warp alloc file specified; all SMs will fall back to default "
+              "scheduler\n");
+    }
+    return;
+  }
+
+  std::ifstream input(gpgpu_n_level_warp_alloc_file);
+  if (!input.is_open()) {
+    if (n_level_requested) {
+      fprintf(stderr,
+              "GPGPU-Sim uArch: error - cannot open n_level warp allocate "
+              "file '%s'; all SMs will fall back to default scheduler\n",
+              gpgpu_n_level_warp_alloc_file);
+    } else {
+      fprintf(stderr,
+              "GPGPU-Sim uArch: warning - cannot open n_level warp allocate "
+              "file '%s'\n",
+              gpgpu_n_level_warp_alloc_file);
+    }
+    return;
+  }
+
+  std::string line;
+  unsigned line_no = 0;
+  while (std::getline(input, line)) {
+    ++line_no;
+    std::string trimmed = trim(line);
+    if (trimmed.empty() || trimmed[0] == '#') continue;
+
+    std::vector<std::string> tokens;
+    if (!split_top_level_csv(trimmed, &tokens)) {
+      fprintf(stderr,
+              "GPGPU-Sim uArch: warning - malformed n_level line %u: %s\n",
+              line_no, trimmed.c_str());
+      continue;
+    }
+    if (tokens.size() < 3) {
+      fprintf(stderr,
+              "GPGPU-Sim uArch: warning - n_level line %u missing fields: %s\n",
+              line_no, trimmed.c_str());
+      continue;
+    }
+
+    unsigned sm_id = 0;
+    if (!parse_uint(tokens[0], &sm_id)) {
+      fprintf(stderr,
+              "GPGPU-Sim uArch: warning - invalid SM id in n_level line %u: %s\n",
+              line_no, tokens[0].c_str());
+      continue;
+    }
+
+    std::vector<unsigned> group_sizes;
+    std::vector<unsigned> time_slices;
+    if (!parse_paren_list(tokens[1], &group_sizes) ||
+        !parse_paren_list(tokens[2], &time_slices)) {
+      fprintf(stderr,
+              "GPGPU-Sim uArch: warning - invalid group sizes/time slices in "
+              "n_level line %u\n",
+              line_no);
+      continue;
+    }
+
+    size_t listed_groups = tokens.size() - 3;
+    size_t group_count = group_sizes.size();
+    if (time_slices.size() < group_count) group_count = time_slices.size();
+    if (listed_groups < group_count) group_count = listed_groups;
+
+    if (group_count == 0) {
+      fprintf(stderr,
+              "GPGPU-Sim uArch: warning - no groups parsed in n_level line %u\n",
+              line_no);
+      continue;
+    }
+
+    if (group_sizes.size() != time_slices.size() ||
+        listed_groups != group_sizes.size()) {
+      fprintf(stderr,
+              "GPGPU-Sim uArch: warning - n_level line %u group count mismatch "
+              "(sizes=%zu, slices=%zu, lists=%zu). Using %zu groups.\n",
+              line_no, group_sizes.size(), time_slices.size(), listed_groups,
+              group_count);
+    }
+
+    n_level_warp_group_config cfg;
+    cfg.groups.resize(group_count);
+    cfg.time_slices.assign(time_slices.begin(),
+                           time_slices.begin() + group_count);
+
+    std::set<unsigned> seen_warps;
+    for (size_t i = 0; i < group_count; ++i) {
+      std::vector<unsigned> warps;
+      if (!parse_paren_list(tokens[3 + i], &warps)) {
+        fprintf(stderr,
+                "GPGPU-Sim uArch: warning - invalid group list in n_level "
+                "line %u (group %zu)\n",
+                line_no, i);
+        continue;
+      }
+      if (group_sizes[i] != warps.size()) {
+        fprintf(stderr,
+                "GPGPU-Sim uArch: warning - group size mismatch in n_level "
+                "line %u (group %zu: expected %u, got %zu)\n",
+                line_no, i, group_sizes[i], warps.size());
+      }
+      for (size_t w = 0; w < warps.size(); ++w) {
+        if (warps[w] >= max_warps_per_shader) {
+          fprintf(stderr,
+                  "GPGPU-Sim uArch: warning - warp id %u out of range in "
+                  "n_level line %u\n",
+                  warps[w], line_no);
+          continue;
+        }
+        if (seen_warps.count(warps[w]) != 0) {
+          fprintf(stderr,
+                  "GPGPU-Sim uArch: warning - duplicate warp id %u in n_level "
+                  "line %u\n",
+                  warps[w], line_no);
+        }
+        seen_warps.insert(warps[w]);
+      }
+      cfg.groups[i].swap(warps);
+    }
+
+    if (m_n_level_warp_alloc.count(sm_id) != 0) {
+      fprintf(stderr,
+              "GPGPU-Sim uArch: warning - duplicate SM entry %u in n_level "
+              "file, overwriting\n",
+              sm_id);
+    }
+    m_n_level_warp_alloc[sm_id] = cfg;
+  }
+  if (n_level_requested && m_n_level_warp_alloc.empty()) {
+    fprintf(stderr,
+            "GPGPU-Sim uArch: error - n_level warp alloc file '%s' "
+            "contains no valid SM entries; all SMs will fall back to default "
+            "scheduler\n",
+            gpgpu_n_level_warp_alloc_file);
+  }
+}
+
+const n_level_warp_group_config *shader_core_config::get_n_level_warp_alloc(
+    unsigned sid) const {
+  if (!m_n_level_warp_alloc_loaded) {
+    const_cast<shader_core_config *>(this)->parse_n_level_warp_alloc();
+  }
+  std::map<unsigned, n_level_warp_group_config>::const_iterator iter =
+      m_n_level_warp_alloc.find(sid);
+  if (iter == m_n_level_warp_alloc.end()) return NULL;
+  return &iter->second;
+}
+
 unsigned int shader_core_config::max_cta(const kernel_info_t &k) const {
   unsigned threads_per_cta = k.threads_per_cta();
   const class function_info *kernel = k.entry();
@@ -4577,28 +5294,34 @@ bool shd_warp_t::hardware_done() const {
   return functional_done() && stores_done() && !inst_in_pipeline();
 }
 
-bool shd_warp_t::waiting() {
+shd_warp_t::wait_kind shd_warp_t::waiting_kind() {
   if (functional_done()) {
     // waiting to be initialized with a kernel
-    return true;
-  } else if (m_shader->warp_waiting_at_barrier(m_warp_id)) {
+    return wait_kind::DONE;
+  }
+  if (m_shader->warp_waiting_at_barrier(m_warp_id)) {
     // waiting for other warps in CTA to reach barrier
-    return true;
-  } else if (m_shader->warp_waiting_at_mem_barrier(m_warp_id)) {
+    return wait_kind::CTA_BARRIER;
+  }
+  if (m_shader->warp_waiting_at_mem_barrier(m_warp_id)) {
     // waiting for memory barrier
-    return true;
-  } else if (m_n_atomic > 0) {
+    return wait_kind::MEMBAR;
+  }
+  if (m_n_atomic > 0) {
     // waiting for atomic operation to complete at memory:
     // this stall is not required for accurate timing model, but rather we
     // stall here since if a call/return instruction occurs in the meantime
     // the functional execution of the atomic when it hits DRAM can cause
     // the wrong register to be read.
-    return true;
-  } else if (m_waiting_ldgsts) {  // Waiting for LDGSTS to finish
-    return true;
+    return wait_kind::ATOMIC;
   }
-  return false;
+  if (m_waiting_ldgsts) {  // Waiting for LDGSTS to finish
+    return wait_kind::LDGSTS;
+  }
+  return wait_kind::NONE;
 }
+
+bool shd_warp_t::waiting() { return waiting_kind() != wait_kind::NONE; }
 
 void shd_warp_t::print(FILE *fout) const {
   if (!done_exit()) {

@@ -35,19 +35,21 @@ void issue_tracer::init(bool enable, const char *path, unsigned n_sms) {
     return;
   }
 
-  file << "cycle,sm,scheduler,warp,event,pc,mask,OP,Space,One_Reason";
-  file << ",MEM_WAIT,REG_WAIT,IBUFFER_EMPTY,BARRIER,CONTROL_HAZARD";
-  file << ",PIPE_BUSY,DUAL_ISSUE_RESTRICT,Issue_Sector_Addresses";
-  file << ",Issue_Sector_Lanes\n";
+  file << "cycle,sm,scheduler,warp,warp_group,event,pc,mask,OP,Space,One_Reason";
+  file << ",MEM_WAIT,REG_WAIT,IBUFFER_EMPTY,WAIT_CTA_BARRIER,WAIT_MEMBAR";
+  file << ",WAIT_ATOMIC,WAIT_LDGSTS,WAIT_DONE,CONTROL_HAZARD,PIPE_BUSY";
+  file << ",DUAL_ISSUE_RESTRICT,Issue_Sector_Addresses";
+  file << ",Issue_Sector_Lanes,hbm_bw_GBps,hbm_occupancy\n";
 }
 
 void issue_tracer::emit_issue(unsigned sid, unsigned wid, unsigned sch_id,
-                              unsigned long long cycle,
+                              int warp_group, unsigned long long cycle,
                               const active_mask_t &mask,
                               const std::string &opcode,
                               const std::string &space, address_type pc,
                               const std::string &sector_addresses,
-                              const std::string &sector_lane_ids) {
+                              const std::string &sector_lane_ids,
+                              double hbm_bandwidth_gbps, double hbm_occupancy) {
   if (!s_enabled) return;
   if (sid >= s_buffers.size()) return;
 
@@ -58,22 +60,29 @@ void issue_tracer::emit_issue(unsigned sid, unsigned wid, unsigned sch_id,
       sector_addresses.empty() ? "NA" : sector_addresses;
   const std::string sector_lane_field =
       sector_lane_ids.empty() ? "NA" : sector_lane_ids;
-  oss << cycle << ',' << sid << ',' << sch_id << ',' << wid << ",ISSUE,"
-      << hexify(pc) << ',' << mask_to_hex(mask) << ',' << escape(opcode_field)
+  oss << cycle << ',' << sid << ',' << sch_id << ',' << wid << ',';
+  if (warp_group < 0)
+    oss << "NA";
+  else
+    oss << warp_group;
+  oss << ",ISSUE," << hexify(pc) << ',' << mask_to_hex(mask) << ','
+      << escape(opcode_field)
       << ',' << escape(space_field)
-      << ",NA,0,0,0,0,0,0,0," << escape(sector_addr_field) << ','
-      << escape(sector_lane_field) << '\n';
+      << ",NA,0,0,0,0,0,0,0,0,0,0,0," << escape(sector_addr_field) << ','
+      << escape(sector_lane_field) << ',' << std::fixed << std::setprecision(6)
+      << hbm_bandwidth_gbps << ',' << hbm_occupancy << '\n';
   append(sid, oss.str());
 }
 
-void issue_tracer::emit_stall(unsigned sid, int sample_warp,
+void issue_tracer::emit_stall(unsigned sid, int sample_warp, int warp_group,
                               unsigned long long cycle,
                               const active_mask_t *mask,
                               const std::string &opcode,
                               const std::string &space, address_type pc,
                               int scheduler_id,
                               const issue_stall_counts &counts,
-                              const std::string &one_reason) {
+                              const std::string &one_reason,
+                              double hbm_bandwidth_gbps, double hbm_occupancy) {
   if (!s_enabled) return;
   if (sid >= s_buffers.size()) return;
 
@@ -82,7 +91,12 @@ void issue_tracer::emit_stall(unsigned sid, int sample_warp,
   const std::string reason_field = one_reason.empty() ? "NA" : one_reason;
   const std::string space_field = space.empty() ? "NA" : space;
   oss << cycle << ',' << sid << ',' << scheduler_id << ',' << sample_warp
-      << ",STALL,";
+      << ',';
+  if (warp_group < 0)
+    oss << "NA";
+  else
+    oss << warp_group;
+  oss << ",STALL,";
   if (pc == static_cast<address_type>(-1))
     oss << "NA";
   else
@@ -95,9 +109,13 @@ void issue_tracer::emit_stall(unsigned sid, int sample_warp,
   oss << ',' << escape(opcode_field) << ',' << escape(space_field) << ','
       << escape(reason_field) << ','
       << counts.mem_wait << ',' << counts.reg_wait << ','
-      << counts.ibuffer_empty << ',' << counts.barrier << ','
+      << counts.ibuffer_empty << ',' << counts.wait_cta_barrier << ','
+      << counts.wait_membar << ',' << counts.wait_atomic << ','
+      << counts.wait_ldgsts << ',' << counts.wait_done << ','
       << counts.control_hazard << ',' << counts.pipe_busy << ','
-      << counts.dual_issue_restrict << ",NA,NA\n";
+      << counts.dual_issue_restrict << ",NA,NA," << std::fixed
+      << std::setprecision(6) << hbm_bandwidth_gbps << ',' << hbm_occupancy
+      << '\n';
   append(sid, oss.str());
 }
 

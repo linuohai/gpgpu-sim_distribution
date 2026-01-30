@@ -42,12 +42,17 @@ std::string addr_space_from_inst(const warp_inst_t &inst) {
 }  // namespace
 
 bool l1_tracer::s_enabled = false;
+bool l1_tracer::s_print_bw = false;
+bool l1_tracer::s_print_compute = false;
 std::string l1_tracer::s_path;
 std::vector<std::string> l1_tracer::s_buffers;
 size_t l1_tracer::s_flush_threshold = 1u << 16;
 
-void l1_tracer::init(bool enable, const char *path, unsigned n_sms) {
+void l1_tracer::init(bool enable, const char *path, unsigned n_sms,
+                     bool print_bw, bool print_compute) {
   s_enabled = enable && path && *path;
+  s_print_bw = print_bw;
+  s_print_compute = print_compute;
   s_path.clear();
   s_buffers.clear();
   if (!s_enabled) return;
@@ -63,14 +68,19 @@ void l1_tracer::init(bool enable, const char *path, unsigned n_sms) {
     return;
   }
 
-  file << "cycle,sm_id,warp_id,lane_id,op,space,address,l1_status,pc,hbm_bw_GBps,";
-  file << "hbm_occupancy,sm_alu_active_lanes,sm_alu_total_lanes,";
-  file << "sm_alu_utilization,sm_sp_active_lanes,sm_sp_total_lanes,"
-       << "sm_sp_utilization,sm_int_active_lanes,sm_int_total_lanes,"
-       << "sm_int_utilization,sm_dp_active_lanes,sm_dp_total_lanes,"
-       << "sm_dp_utilization,sm_sfu_active_lanes,sm_sfu_total_lanes,"
-       << "sm_sfu_utilization,sm_tensor_active_lanes,sm_tensor_total_lanes,"
-       << "sm_tensor_utilization\n";
+  file << "cycle,sm_id,warp_id,lane_id,op,space,address,l1_status,pc";
+  if (s_print_bw) {
+    file << ",hbm_bw_GBps,hbm_occupancy";
+  }
+  if (s_print_compute) {
+    file << ",sm_alu_active_lanes,sm_alu_total_lanes,sm_alu_utilization";
+    file << ",sm_sp_active_lanes,sm_sp_total_lanes,sm_sp_utilization";
+    file << ",sm_int_active_lanes,sm_int_total_lanes,sm_int_utilization";
+    file << ",sm_dp_active_lanes,sm_dp_total_lanes,sm_dp_utilization";
+    file << ",sm_sfu_active_lanes,sm_sfu_total_lanes,sm_sfu_utilization";
+    file << ",sm_tensor_active_lanes,sm_tensor_total_lanes,sm_tensor_utilization";
+  }
+  file << '\n';
 }
 
 void l1_tracer::emit(unsigned sid, unsigned wid, const mem_fetch *mf,
@@ -97,31 +107,41 @@ void l1_tracer::emit(unsigned sid, unsigned wid, const mem_fetch *mf,
   std::ostringstream oss;
   address_type pc = mf->get_pc();
   bool has_pc = pc != static_cast<address_type>(-1);
-  const std::string bw_str = format_double(hbm_bandwidth_gbps);
-  const std::string occ_str = format_double(hbm_occupancy);
-  double alu_util = 0.0;
-  if (total_alu_lanes) {
-    alu_util =
-        static_cast<double>(active_alu_lanes) / static_cast<double>(total_alu_lanes);
-    if (alu_util > 1.0) alu_util = 1.0;
+  std::string bw_str;
+  std::string occ_str;
+  if (s_print_bw) {
+    bw_str = format_double(hbm_bandwidth_gbps);
+    occ_str = format_double(hbm_occupancy);
   }
-  const std::string alu_util_str = format_double(alu_util);
-  auto util_string = [](unsigned active, unsigned total) -> std::string {
-    double util = 0.0;
-    if (total) {
-      util = static_cast<double>(active) / static_cast<double>(total);
-      if (util > 1.0) util = 1.0;
+
+  std::string alu_util_str;
+  std::string sp_util_str;
+  std::string int_util_str;
+  std::string dp_util_str;
+  std::string sfu_util_str;
+  std::string tensor_util_str;
+  if (s_print_compute) {
+    auto util_string = [](unsigned active, unsigned total) -> std::string {
+      double util = 0.0;
+      if (total) {
+        util = static_cast<double>(active) / static_cast<double>(total);
+        if (util > 1.0) util = 1.0;
+      }
+      return format_double(util);
+    };
+    double alu_util = 0.0;
+    if (total_alu_lanes) {
+      alu_util = static_cast<double>(active_alu_lanes) /
+                 static_cast<double>(total_alu_lanes);
+      if (alu_util > 1.0) alu_util = 1.0;
     }
-    return format_double(util);
-  };
-  const std::string sp_util_str = util_string(active_sp_lanes, total_sp_lanes);
-  const std::string int_util_str =
-      util_string(active_int_lanes, total_int_lanes);
-  const std::string dp_util_str = util_string(active_dp_lanes, total_dp_lanes);
-  const std::string sfu_util_str =
-      util_string(active_sfu_lanes, total_sfu_lanes);
-  const std::string tensor_util_str =
-      util_string(active_tensor_lanes, total_tensor_lanes);
+    alu_util_str = format_double(alu_util);
+    sp_util_str = util_string(active_sp_lanes, total_sp_lanes);
+    int_util_str = util_string(active_int_lanes, total_int_lanes);
+    dp_util_str = util_string(active_dp_lanes, total_dp_lanes);
+    sfu_util_str = util_string(active_sfu_lanes, total_sfu_lanes);
+    tensor_util_str = util_string(active_tensor_lanes, total_tensor_lanes);
+  }
 
   std::unordered_set<addr_t> seen_lines;
   seen_lines.reserve(lanes.size());
@@ -143,19 +163,23 @@ void l1_tracer::emit(unsigned sid, unsigned wid, const mem_fetch *mf,
     } else {
       oss << "NA";
     }
-    oss << ',' << bw_str << ',' << occ_str;
-    oss << ',' << active_alu_lanes << ',' << total_alu_lanes << ','
-        << alu_util_str;
-    oss << ',' << active_sp_lanes << ',' << total_sp_lanes << ','
-        << sp_util_str;
-    oss << ',' << active_int_lanes << ',' << total_int_lanes << ','
-        << int_util_str;
-    oss << ',' << active_dp_lanes << ',' << total_dp_lanes << ','
-        << dp_util_str;
-    oss << ',' << active_sfu_lanes << ',' << total_sfu_lanes << ','
-        << sfu_util_str;
-    oss << ',' << active_tensor_lanes << ',' << total_tensor_lanes << ','
-        << tensor_util_str;
+    if (s_print_bw) {
+      oss << ',' << bw_str << ',' << occ_str;
+    }
+    if (s_print_compute) {
+      oss << ',' << active_alu_lanes << ',' << total_alu_lanes << ','
+          << alu_util_str;
+      oss << ',' << active_sp_lanes << ',' << total_sp_lanes << ','
+          << sp_util_str;
+      oss << ',' << active_int_lanes << ',' << total_int_lanes << ','
+          << int_util_str;
+      oss << ',' << active_dp_lanes << ',' << total_dp_lanes << ','
+          << dp_util_str;
+      oss << ',' << active_sfu_lanes << ',' << total_sfu_lanes << ','
+          << sfu_util_str;
+      oss << ',' << active_tensor_lanes << ',' << total_tensor_lanes << ','
+          << tensor_util_str;
+    }
     oss << '\n';
   }
 

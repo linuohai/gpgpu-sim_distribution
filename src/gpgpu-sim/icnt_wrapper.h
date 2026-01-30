@@ -65,5 +65,8 @@ enum network_mode { INTERSIM = 1, LOCAL_XBAR = 2, N_NETWORK_MODE };
 
 void icnt_wrapper_init();
 void icnt_reg_options(class OptionParser* opp);
+bool icnt_transfer_stats_supported();
+void icnt_get_last_transfer_packets(unsigned* req_packets,
+                                    unsigned* reply_packets);
 
 #endif

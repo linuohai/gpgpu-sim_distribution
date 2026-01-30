@@ -196,3 +196,20 @@ void icnt_wrapper_init() {
       break;
   }
 }
+
+bool icnt_transfer_stats_supported() {
+  return g_network_mode == LOCAL_XBAR && g_localicnt_interface != NULL;
+}
+
+void icnt_get_last_transfer_packets(unsigned* req_packets,
+                                    unsigned* reply_packets) {
+  if (req_packets) *req_packets = 0;
+  if (reply_packets) *reply_packets = 0;
+  if (!icnt_transfer_stats_supported()) return;
+  if (req_packets) {
+    *req_packets = g_localicnt_interface->GetLastForwardedPackets(REQ_NET);
+  }
+  if (reply_packets) {
+    *reply_packets = g_localicnt_interface->GetLastForwardedPackets(REPLY_NET);
+  }
+}

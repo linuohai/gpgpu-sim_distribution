@@ -2017,8 +2017,31 @@ enum cache_request_status l1_cache::access(new_addr_type addr, mem_fetch *mf,
                                            unsigned time,
                                            std::list<cache_event> &events) {
   enum cache_request_status probe_status = RESERVATION_FAIL;
-  enum cache_request_status status =
-      data_cache::access(addr, mf, time, events, &probe_status);
+  enum cache_request_status status = RESERVATION_FAIL;
+  bool handled_by_perfect_l1d = false;
+
+  if (m_gpu && m_gpu->get_config().shader_config().gpgpu_perfect_l1d && mf) {
+    const bool is_target = (mf->get_access_type() == GLOBAL_ACC_R) &&
+                           !mf->isatomic() && !mf->get_is_write();
+    if (is_target) {
+      // Ideal L1D: force eligible global reads to HIT.
+      // This only affects the timing model (no lower-level request is issued).
+      probe_status = HIT;
+      status = HIT;
+      m_bandwidth_management.use_data_port(mf, status, events);
+      m_stats.inc_stats(
+          mf->get_access_type(),
+          m_stats.select_stats_status(probe_status, status), mf->get_streamID());
+      m_stats.inc_stats_pw(
+          mf->get_access_type(),
+          m_stats.select_stats_status(probe_status, status), mf->get_streamID());
+      handled_by_perfect_l1d = true;
+    }
+  }
+
+  if (!handled_by_perfect_l1d) {
+    status = data_cache::access(addr, mf, time, events, &probe_status);
+  }
   enum cache_request_status trace_status =
       m_stats.select_stats_status(probe_status, status);
   unsigned long long cycle =

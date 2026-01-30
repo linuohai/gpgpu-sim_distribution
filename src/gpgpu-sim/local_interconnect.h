@@ -80,6 +80,7 @@ class xbar_router {
   unsigned long long in_buffer_full;
   unsigned long long in_buffer_util;
   unsigned long long packets_num;
+  unsigned last_forwarded_packets;
 
  private:
   void iSLIP_Advance();
@@ -130,6 +131,7 @@ class LocalInterconnect {
   void DisplayStats() const;
   void DisplayOverallStats() const;
   unsigned GetFlitSize() const;
+  unsigned GetLastForwardedPackets(enum Interconnect_type subnet) const;
 
   void DisplayState(FILE* fp) const;
 

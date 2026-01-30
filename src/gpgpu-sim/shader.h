@@ -102,6 +102,15 @@ class thread_ctx_t {
 
 class shd_warp_t {
  public:
+  enum class wait_kind {
+    NONE = 0,
+    DONE,
+    CTA_BARRIER,
+    MEMBAR,
+    ATOMIC,
+    LDGSTS,
+  };
+
   shd_warp_t(class shader_core_ctx *shader, unsigned warp_size)
       : m_shader(shader), m_warp_size(warp_size) {
     m_stores_outstanding = 0;
@@ -174,6 +183,7 @@ class shd_warp_t {
   }
 
   bool functional_done() const;
+  wait_kind waiting_kind();  // not const due to membar
   bool waiting();  // not const due to membar
   bool hardware_done() const;
 
@@ -371,7 +381,13 @@ enum concrete_scheduler {
   CONCRETE_SCHEDULER_RRR,
   CONCRETE_SCHEDULER_WARP_LIMITING,
   CONCRETE_SCHEDULER_OLDEST_FIRST,
+  CONCRETE_SCHEDULER_N_LEVEL,
   NUM_CONCRETE_SCHEDULERS
+};
+
+struct n_level_warp_group_config {
+  std::vector<std::vector<unsigned>> groups;
+  std::vector<unsigned> time_slices;
 };
 
 class scheduler_unit {  // this can be copied freely, so can be used in std
@@ -635,6 +651,37 @@ class swl_scheduler : public scheduler_unit {
  protected:
   scheduler_prioritization_type m_prioritization;
   unsigned m_num_warps_to_limit;
+};
+
+class n_level_scheduler : public scheduler_unit {
+ public:
+  n_level_scheduler(shader_core_stats *stats, shader_core_ctx *shader,
+                    Scoreboard *scoreboard, simt_stack **simt,
+                    std::vector<shd_warp_t *> *warp, register_set *sp_out,
+                    register_set *dp_out, register_set *sfu_out,
+                    register_set *int_out, register_set *tensor_core_out,
+                    std::vector<register_set *> &spec_cores_out,
+                    register_set *mem_out, int id,
+                    const char *default_scheduler_str);
+  virtual ~n_level_scheduler() {}
+  virtual void order_warps();
+  virtual void done_adding_supervised_warps() {
+    m_last_supervised_issued = m_supervised_warps.begin();
+  }
+
+ protected:
+  virtual void do_on_warp_issued(
+      unsigned warp_id, unsigned num_issued,
+      const std::vector<shd_warp_t *>::const_iterator &prioritized_iter);
+
+ private:
+  void append_default_warps(
+      const std::vector<shd_warp_t *> &default_warps,
+      std::vector<shd_warp_t *> &result_list);
+
+  concrete_scheduler m_default_scheduler;
+  std::vector<int> m_last_issued_warp_id_per_group;
+  int m_last_issued_default_warp_id;
 };
 
 class opndcoll_rfu_t {  // operand collector based register file unit
@@ -1515,6 +1562,9 @@ class shader_core_config : public core_config {
   shader_core_config(gpgpu_context *ctx) : core_config(ctx) {
     pipeline_widths_string = NULL;
     gpgpu_ctx = ctx;
+    gpgpu_n_level_warp_alloc_file = NULL;
+    gpgpu_n_level_default_scheduler_string = NULL;
+    m_n_level_warp_alloc_loaded = false;
   }
 
   void init() {
@@ -1597,8 +1647,12 @@ class shader_core_config : public core_config {
       }
       std::sort(shmem_opt_list.begin(), shmem_opt_list.end());
     }
+
+    parse_n_level_warp_alloc();
   }
   void reg_options(class OptionParser *opp);
+  void parse_n_level_warp_alloc();
+  const n_level_warp_group_config *get_n_level_warp_alloc(unsigned sid) const;
   unsigned max_cta(const kernel_info_t &k) const;
   unsigned num_shader() const {
     return n_simt_clusters * n_simt_cores_per_cluster;
@@ -1619,6 +1673,7 @@ class shader_core_config : public core_config {
   // data
   char *gpgpu_shader_core_pipeline_opt;
   bool gpgpu_perfect_mem;
+  bool gpgpu_perfect_l1d;
   bool gpgpu_clock_gated_reg_file;
   bool gpgpu_clock_gated_lanes;
   enum divergence_support_t model;
@@ -1629,6 +1684,10 @@ class shader_core_config : public core_config {
       max_cta_per_core;  // Limit on number of concurrent CTAs in shader core
   unsigned max_barriers_per_cta;
   char *gpgpu_scheduler_string;
+  char *gpgpu_n_level_warp_alloc_file;
+  char *gpgpu_n_level_default_scheduler_string;
+  std::map<unsigned, n_level_warp_group_config> m_n_level_warp_alloc;
+  bool m_n_level_warp_alloc_loaded;
   unsigned gpgpu_shmem_per_block;
   unsigned gpgpu_registers_per_block;
   char *pipeline_widths_string;
@@ -2146,6 +2205,17 @@ class shader_core_ctx : public core_t {
   // accessors
   std::list<unsigned> get_regs_written(const inst_t &fvt) const;
   const shader_core_config *get_config() const { return m_config; }
+  bool n_level_enabled() const { return m_n_level_state.enabled; }
+  unsigned n_level_current_group() const {
+    return m_n_level_state.current_group;
+  }
+  int n_level_group_for_warp(unsigned warp_id) const {
+    if (warp_id >= m_n_level_state.warp_to_group.size()) return -1;
+    return m_n_level_state.warp_to_group[warp_id];
+  }
+  const std::vector<std::vector<unsigned>> &n_level_groups() const {
+    return m_n_level_state.groups;
+  }
   void print_cache_stats(FILE *fp, unsigned &dl1_accesses,
                          unsigned &dl1_misses);
 
@@ -2606,6 +2676,22 @@ class shader_core_ctx : public core_t {
   int find_available_hwtid(unsigned int cta_size, bool occupy);
 
  private:
+  struct n_level_state_t {
+    bool enabled = false;
+    std::vector<std::vector<unsigned>> groups;
+    std::vector<unsigned> time_slices;
+    std::vector<int> warp_to_group;
+    unsigned current_group = 0;
+    unsigned remaining_in_group = 0;
+  };
+
+  bool n_level_group_has_active_warp(unsigned group_id) const;
+  void init_n_level_state(const n_level_warp_group_config &cfg);
+  void n_level_begin_cycle();
+  void n_level_end_cycle();
+
+  n_level_state_t m_n_level_state;
+
   unsigned int m_occupied_n_threads;
   unsigned int m_occupied_shmem;
   unsigned int m_occupied_regs;

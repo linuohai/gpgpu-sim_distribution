@@ -416,12 +416,26 @@ class gpgpu_sim_config : public power_config,
     m_l1_trace_enable = false;
     m_l1_trace_path = NULL;
     m_l1_trace_debug = false;
+    m_l1_trace_print_bw = false;
+    m_l1_trace_print_compute = false;
     m_l2_trace_enable = false;
     m_l2_trace_path = NULL;
     m_l2_trace_print_bw = true;
     m_l2_trace_print_compute = true;
     m_issue_trace_enable = false;
     m_issue_trace_path = NULL;
+    m_stall_reason_pc_stats_enable = false;
+    m_stall_reason_pc_stats_path = NULL;
+    m_stall_reason_pc_stats_topk = 0;
+    m_icnt_trace_enable = false;
+    m_icnt_trace_path = NULL;
+    m_icnt_trace_period = 500;
+    m_l2_bw_enable = false;
+    m_l2_bw_path = NULL;
+    m_l2_bw_period = 500;
+    m_hbm_partition_trace_enable = false;
+    m_hbm_partition_trace_path = NULL;
+    m_hbm_partition_trace_period = 1;
     m_trace_model = false;
   }
   void reg_options(class OptionParser *opp);
@@ -457,6 +471,7 @@ class gpgpu_sim_config : public power_config,
   unsigned num_shader() const { return m_shader_config.num_shader(); }
   unsigned num_cluster() const { return m_shader_config.n_simt_clusters; }
   unsigned get_max_concurrent_kernel() const { return max_concurrent_kernel; }
+  const shader_core_config &shader_config() const { return m_shader_config; }
 
   /**
    * @brief Check if we are in SST mode
@@ -483,6 +498,11 @@ class gpgpu_sim_config : public power_config,
     return m_l1_trace_path ? m_l1_trace_path : "";
   }
   bool l1_trace_debug_enabled() const { return m_l1_trace_debug; }
+  bool l1_trace_print_bw() const { return m_l1_trace_print_bw; }
+  bool l1_trace_print_compute() const { return m_l1_trace_print_compute; }
+  bool l1_trace_compute_enabled() const {
+    return l1_trace_enabled() && m_l1_trace_print_compute;
+  }
   bool l2_trace_enabled() const {
     return m_trace_model && m_l2_trace_enable && m_l2_trace_path &&
            m_l2_trace_path[0] != '\0';
@@ -503,6 +523,41 @@ class gpgpu_sim_config : public power_config,
   }
   const char *issue_trace_path() const {
     return m_issue_trace_path ? m_issue_trace_path : "";
+  }
+  bool stall_reason_pc_stats_enabled() const {
+    return m_stall_reason_pc_stats_enable && m_stall_reason_pc_stats_path &&
+           m_stall_reason_pc_stats_path[0] != '\0';
+  }
+  const char *stall_reason_pc_stats_path() const {
+    return m_stall_reason_pc_stats_path ? m_stall_reason_pc_stats_path : "";
+  }
+  unsigned stall_reason_pc_stats_topk() const {
+    return m_stall_reason_pc_stats_topk;
+  }
+  bool icnt_trace_enabled() const {
+    return m_icnt_trace_enable && m_icnt_trace_path &&
+           m_icnt_trace_path[0] != '\0';
+  }
+  const char *icnt_trace_path() const {
+    return m_icnt_trace_path ? m_icnt_trace_path : "";
+  }
+  unsigned icnt_trace_period() const {
+    return m_icnt_trace_period ? m_icnt_trace_period : 1;
+  }
+  bool l2_bw_enabled() const {
+    return m_l2_bw_enable && m_l2_bw_path && m_l2_bw_path[0] != '\0';
+  }
+  const char *l2_bw_path() const { return m_l2_bw_path ? m_l2_bw_path : ""; }
+  unsigned l2_bw_period() const { return m_l2_bw_period ? m_l2_bw_period : 1; }
+  bool hbm_partition_trace_enabled() const {
+    return m_hbm_partition_trace_enable && m_hbm_partition_trace_path &&
+           m_hbm_partition_trace_path[0] != '\0';
+  }
+  const char *hbm_partition_trace_path() const {
+    return m_hbm_partition_trace_path ? m_hbm_partition_trace_path : "";
+  }
+  unsigned hbm_partition_trace_period() const {
+    return m_hbm_partition_trace_period ? m_hbm_partition_trace_period : 1;
   }
 
  private:
@@ -539,6 +594,8 @@ class gpgpu_sim_config : public power_config,
   bool m_l1_trace_enable;
   char *m_l1_trace_path;
   bool m_l1_trace_debug;
+  bool m_l1_trace_print_bw;
+  bool m_l1_trace_print_compute;
   bool m_l2_trace_enable;
   char *m_l2_trace_path;
   bool m_l2_trace_print_bw;
@@ -546,6 +603,18 @@ class gpgpu_sim_config : public power_config,
   bool m_trace_model;
   bool m_issue_trace_enable;
   char *m_issue_trace_path;
+  bool m_stall_reason_pc_stats_enable;
+  char *m_stall_reason_pc_stats_path;
+  unsigned m_stall_reason_pc_stats_topk;
+  bool m_icnt_trace_enable;
+  char *m_icnt_trace_path;
+  unsigned m_icnt_trace_period;
+  bool m_l2_bw_enable;
+  char *m_l2_bw_path;
+  unsigned m_l2_bw_period;
+  bool m_hbm_partition_trace_enable;
+  char *m_hbm_partition_trace_path;
+  unsigned m_hbm_partition_trace_period;
 
   // visualizer
   bool g_visualizer_enabled;

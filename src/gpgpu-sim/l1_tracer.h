@@ -11,7 +11,8 @@ class mem_fetch;
 
 class l1_tracer {
  public:
-  static void init(bool enable, const char *path, unsigned n_sms);
+  static void init(bool enable, const char *path, unsigned n_sms,
+                   bool print_bw, bool print_compute);
   static void emit(unsigned sid, unsigned wid, const mem_fetch *mf,
                    enum cache_request_status status,
                    unsigned long long cycle, unsigned line_sz,
@@ -28,6 +29,8 @@ class l1_tracer {
   static void flush_sid(unsigned sid);
 
   static bool s_enabled;
+  static bool s_print_bw;
+  static bool s_print_compute;
   static std::string s_path;
   static std::vector<std::string> s_buffers;
   static size_t s_flush_threshold;

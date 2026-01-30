@@ -1,0 +1,4451 @@
+input: ./result/issue_trace/fa4k_gto_issue.csv
+algo: kmeans-bic
+center: median
+slice_mode: approx-gcd
+slice_abs_tol: 2.0
+slice_rel_tol: 0.01
+slice_max: 256
+min_groups: 1
+max_groups: 10
+max_warps: 64
+outlier_mode: merge
+outlier_slice: 1
+lines: 266761884
+issue_lines: 76423168
+bad_rows: 0
+
+SM 0
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 180.6203
+    k=2: 81.1367
+    k=3: 72.8567
+    k=4: 70.3774
+    k=5: 12.9478
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=124179.625, accepted=True, total_error=2211.2500, max_error=810.1250, sum_slices=26
+  merge_same_slice: enabled
+    merge slice=4: groups=[0, 1, 2, 3], merged_rep=496834, warp_count=4, dup_warps=0
+    merge slice=5: groups=[4, 5], merged_rep=620089, warp_count=4, dup_warps=0
+  group 0: size=1, rep=496660
+    warps: [6]
+    cycles: [496660]
+  group 1: size=1, rep=496777
+    warps: [7]
+    cycles: [496777]
+  group 2: size=1, rep=496892
+    warps: [5]
+    cycles: [496892]
+  group 3: size=1, rep=497021
+    warps: [4]
+    cycles: [497021]
+  group 4: size=1, rep=620088
+    warps: [2]
+    cycles: [620088]
+  group 5: size=3, rep=620090
+    warps: [0, 1, 3]
+    cycles: [620090, 620090, 620090]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 1
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 5
+  bic:
+    k=1: 185.5634
+    k=2: 72.1764
+    k=3: 53.8727
+    k=4: 8.7889
+    k=5: -161.6272
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=169266.33333333334, accepted=True, total_error=2900.6667, max_error=1327.3333, sum_slices=17
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1, 2], merged_rep=507845, warp_count=4, dup_warps=0
+    merge slice=4: groups=[3, 4], merged_rep=675739, warp_count=4, dup_warps=0
+  group 0: size=1, rep=507799
+    warps: [4]
+    cycles: [507799]
+  group 1: size=2, rep=507845
+    warps: [5, 7]
+    cycles: [507845, 507845]
+  group 2: size=1, rep=508001
+    warps: [6]
+    cycles: [508001]
+  group 3: size=1, rep=675738
+    warps: [0]
+    cycles: [675738]
+  group 4: size=3, rep=675740
+    warps: [1, 2, 3]
+    cycles: [675740, 675740, 675740]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 2
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 186.3854
+    k=2: 67.4920
+    k=3: 33.4024
+    k=4: 26.8691
+    k=5: 21.2794
+    k=6: 19.4081
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=167208.1666666667, accepted=True, total_error=38034.3333, max_error=5382.3333, sum_slices=28
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1, 2, 3], merged_rep=497464, warp_count=4, dup_warps=0
+    merge slice=4: groups=[4, 5, 6, 7], merged_rep=674211, warp_count=4, dup_warps=0
+  group 0: size=1, rep=497457
+    warps: [0]
+    cycles: [497457]
+  group 1: size=1, rep=497459
+    warps: [1]
+    cycles: [497459]
+  group 2: size=1, rep=497469
+    warps: [2]
+    cycles: [497469]
+  group 3: size=1, rep=497593
+    warps: [3]
+    cycles: [497593]
+  group 4: size=1, rep=674208
+    warps: [4]
+    cycles: [674208]
+  group 5: size=1, rep=674210
+    warps: [7]
+    cycles: [674210]
+  group 6: size=1, rep=674212
+    warps: [5]
+    cycles: [674212]
+  group 7: size=1, rep=674215
+    warps: [6]
+    cycles: [674215]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 3
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 186.5431
+    k=2: 18.8249
+    k=3: 13.8515
+    k=4: 12.8755
+    k=5: 9.7041
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=45013.63333333333, accepted=True, total_error=3180.0667, max_error=1585.0333, sum_slices=82
+  merge_same_slice: enabled
+    merge slice=11: groups=[0, 1], merged_rep=496734, warp_count=4, dup_warps=0
+    merge slice=15: groups=[2, 3, 4, 5], merged_rep=675202, warp_count=4, dup_warps=0
+  group 0: size=1, rep=496733
+    warps: [7]
+    cycles: [496733]
+  group 1: size=3, rep=496735
+    warps: [4, 5, 6]
+    cycles: [496735, 496735, 496735]
+  group 2: size=1, rep=675199
+    warps: [3]
+    cycles: [675199]
+  group 3: size=1, rep=675201
+    warps: [2]
+    cycles: [675201]
+  group 4: size=1, rep=675203
+    warps: [0]
+    cycles: [675203]
+  group 5: size=1, rep=675206
+    warps: [1]
+    cycles: [675206]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 4
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 186.6581
+    k=2: 82.2168
+    k=3: 73.0962
+    k=4: 71.5824
+    k=5: 12.9478
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=61468.625, accepted=True, total_error=9685.7500, max_error=4523.8750, sum_slices=54
+  merge_same_slice: enabled
+    merge slice=8: groups=[0, 1, 2, 3], merged_rep=491878, warp_count=4, dup_warps=0
+    merge slice=11: groups=[4, 5], merged_rep=671632, warp_count=4, dup_warps=0
+  group 0: size=1, rep=491687
+    warps: [2]
+    cycles: [491687]
+  group 1: size=1, rep=491811
+    warps: [1]
+    cycles: [491811]
+  group 2: size=1, rep=491944
+    warps: [0]
+    cycles: [491944]
+  group 3: size=1, rep=492070
+    warps: [3]
+    cycles: [492070]
+  group 4: size=1, rep=671631
+    warps: [5]
+    cycles: [671631]
+  group 5: size=3, rep=671633
+    warps: [4, 6, 7]
+    cycles: [671633, 671633, 671633]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 5
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 4
+  bic:
+    k=1: 186.4142
+    k=2: 6.0163
+    k=3: 4.6300
+    k=4: -165.7861
+    k=5: -161.6272
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=165782.5416666667, accepted=True, total_error=22504.9167, max_error=6430.8333, sum_slices=14
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1], merged_rep=492525, warp_count=4, dup_warps=0
+    merge slice=4: groups=[2, 3], merged_rep=669560, warp_count=4, dup_warps=0
+  group 0: size=1, rep=492524
+    warps: [2]
+    cycles: [492524]
+  group 1: size=3, rep=492526
+    warps: [0, 1, 3]
+    cycles: [492526, 492526, 492526]
+  group 2: size=1, rep=669559
+    warps: [5]
+    cycles: [669559]
+  group 3: size=3, rep=669561
+    warps: [4, 6, 7]
+    cycles: [669561, 669561, 669561]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 6
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 186.7068
+    k=2: 69.6914
+    k=3: 16.3607
+    k=4: 12.8755
+    k=5: 9.7041
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=61930.375, accepted=True, total_error=11112.2500, max_error=5424.1250, sum_slices=54
+  merge_same_slice: enabled
+    merge slice=8: groups=[0, 1, 2, 3], merged_rep=495509, warp_count=4, dup_warps=0
+    merge slice=11: groups=[4, 5], merged_rep=675811, warp_count=4, dup_warps=0
+  group 0: size=1, rep=495441
+    warps: [3]
+    cycles: [495441]
+  group 1: size=1, rep=495445
+    warps: [2]
+    cycles: [495445]
+  group 2: size=1, rep=495573
+    warps: [1]
+    cycles: [495573]
+  group 3: size=1, rep=495575
+    warps: [0]
+    cycles: [495575]
+  group 4: size=1, rep=675810
+    warps: [4]
+    cycles: [675810]
+  group 5: size=3, rep=675812
+    warps: [5, 6, 7]
+    cycles: [675812, 675812, 675812]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 7
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 186.3081
+    k=2: 67.4774
+    k=3: 31.4448
+    k=4: 12.8755
+    k=5: 9.7041
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=45399.09090909091, accepted=True, total_error=11538.7273, max_error=5696.3636, sum_slices=74
+  merge_same_slice: enabled
+    merge slice=11: groups=[0, 1, 2, 3], merged_rep=499396, warp_count=4, dup_warps=0
+    merge slice=15: groups=[4, 5], merged_rep=675291, warp_count=4, dup_warps=0
+  group 0: size=1, rep=499389
+    warps: [4]
+    cycles: [499389]
+  group 1: size=1, rep=499391
+    warps: [5]
+    cycles: [499391]
+  group 2: size=1, rep=499401
+    warps: [6]
+    cycles: [499401]
+  group 3: size=1, rep=499525
+    warps: [7]
+    cycles: [499525]
+  group 4: size=1, rep=675290
+    warps: [0]
+    cycles: [675290]
+  group 5: size=3, rep=675292
+    warps: [1, 2, 3]
+    cycles: [675292, 675292, 675292]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 8
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 7
+  bic:
+    k=1: 186.3825
+    k=2: 73.0983
+    k=3: 71.6381
+    k=4: 35.8791
+    k=5: 20.7944
+    k=6: 13.8629
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=171667.5, accepted=True, total_error=15056.5000, max_error=5014.5000, sum_slices=25
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1, 2], merged_rep=509991, warp_count=4, dup_warps=0
+    merge slice=4: groups=[3, 4, 5, 6], merged_rep=686677, warp_count=4, dup_warps=0
+  group 0: size=2, rep=509988
+    warps: [0, 1]
+    cycles: [509988, 509988]
+  group 1: size=1, rep=509991
+    warps: [2]
+    cycles: [509991]
+  group 2: size=1, rep=510122
+    warps: [3]
+    cycles: [510122]
+  group 3: size=1, rep=686670
+    warps: [5]
+    cycles: [686670]
+  group 4: size=1, rep=686672
+    warps: [6]
+    cycles: [686672]
+  group 5: size=1, rep=686682
+    warps: [7]
+    cycles: [686682]
+  group 6: size=1, rep=686806
+    warps: [4]
+    cycles: [686806]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 9
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 4
+  bic:
+    k=1: 186.4622
+    k=2: 67.9850
+    k=3: 4.6300
+    k=4: -165.7861
+    k=5: -161.6272
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=167314.9166666667, accepted=True, total_error=20572.1667, max_error=5840.3333, sum_slices=14
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1], merged_rep=497498, warp_count=4, dup_warps=0
+    merge slice=4: groups=[2, 3], merged_rep=675099, warp_count=4, dup_warps=0
+  group 0: size=1, rep=497430
+    warps: [7]
+    cycles: [497430]
+  group 1: size=3, rep=497566
+    warps: [4, 5, 6]
+    cycles: [497566, 497566, 497566]
+  group 2: size=1, rep=675098
+    warps: [0]
+    cycles: [675098]
+  group 3: size=3, rep=675100
+    warps: [1, 2, 3]
+    cycles: [675100, 675100, 675100]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 10
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 186.4487
+    k=2: 85.9851
+    k=3: 68.8077
+    k=4: 27.5362
+    k=5: 23.3420
+    k=6: 23.2922
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=167060.0, accepted=True, total_error=41431.0000, max_error=5823.0000, sum_slices=28
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1, 2, 3], merged_rep=496674, warp_count=4, dup_warps=0
+    merge slice=4: groups=[4, 5, 6, 7], merged_rep=674059, warp_count=4, dup_warps=0
+  group 0: size=1, rep=496399
+    warps: [0]
+    cycles: [496399]
+  group 1: size=1, rep=496534
+    warps: [1]
+    cycles: [496534]
+  group 2: size=1, rep=496815
+    warps: [3]
+    cycles: [496815]
+  group 3: size=1, rep=496818
+    warps: [2]
+    cycles: [496818]
+  group 4: size=1, rep=674056
+    warps: [4]
+    cycles: [674056]
+  group 5: size=1, rep=674058
+    warps: [7]
+    cycles: [674058]
+  group 6: size=1, rep=674060
+    warps: [5]
+    cycles: [674060]
+  group 7: size=1, rep=674063
+    warps: [6]
+    cycles: [674063]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 11
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 185.5567
+    k=2: 81.8862
+    k=3: 73.8771
+    k=4: 34.0638
+    k=5: 22.9699
+    k=6: 15.6481
+    k=7: 6.9315
+    k=8: -149.1506
+  slice_info: base=174103.3333333333, accepted=True, total_error=25227.3333, max_error=3655.3333, sum_slices=28
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1, 2, 3], merged_rep=524960, warp_count=4, dup_warps=0
+    merge slice=4: groups=[4, 5, 6, 7], merged_rep=692826, warp_count=4, dup_warps=0
+  group 0: size=1, rep=524951
+    warps: [4]
+    cycles: [524951]
+  group 1: size=1, rep=524960
+    warps: [6]
+    cycles: [524960]
+  group 2: size=1, rep=524961
+    warps: [5]
+    cycles: [524961]
+  group 3: size=1, rep=525244
+    warps: [7]
+    cycles: [525244]
+  group 4: size=1, rep=692758
+    warps: [0]
+    cycles: [692758]
+  group 5: size=1, rep=692762
+    warps: [3]
+    cycles: [692762]
+  group 6: size=1, rep=692890
+    warps: [2]
+    cycles: [692890]
+  group 7: size=1, rep=692892
+    warps: [1]
+    cycles: [692892]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 12
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 186.3149
+    k=2: 79.9937
+    k=3: 77.2143
+    k=4: 72.8309
+    k=5: 24.0381
+    k=6: 19.4081
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=169855.6666666667, accepted=True, total_error=24335.3333, max_error=3479.3333, sum_slices=28
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1, 2, 3], merged_rep=506863, warp_count=4, dup_warps=0
+    merge slice=4: groups=[4, 5, 6, 7], merged_rep=682836, warp_count=4, dup_warps=0
+  group 0: size=1, rep=506800
+    warps: [5]
+    cycles: [506800]
+  group 1: size=1, rep=506802
+    warps: [6]
+    cycles: [506802]
+  group 2: size=1, rep=506924
+    warps: [4]
+    cycles: [506924]
+  group 3: size=1, rep=507058
+    warps: [7]
+    cycles: [507058]
+  group 4: size=1, rep=682768
+    warps: [2]
+    cycles: [682768]
+  group 5: size=1, rep=682772
+    warps: [1]
+    cycles: [682772]
+  group 6: size=1, rep=682900
+    warps: [0]
+    cycles: [682900]
+  group 7: size=1, rep=682902
+    warps: [3]
+    cycles: [682902]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 13
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 186.1067
+    k=2: 75.2352
+    k=3: 73.8536
+    k=4: 23.9659
+    k=5: 24.0381
+    k=6: 19.4081
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=168017.0416666667, accepted=True, total_error=22591.8333, max_error=3284.8333, sum_slices=28
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1, 2, 3], merged_rep=501622, warp_count=4, dup_warps=0
+    merge slice=4: groups=[4, 5, 6, 7], merged_rep=675287, warp_count=4, dup_warps=0
+  group 0: size=1, rep=501554
+    warps: [0]
+    cycles: [501554]
+  group 1: size=1, rep=501558
+    warps: [3]
+    cycles: [501558]
+  group 2: size=1, rep=501686
+    warps: [2]
+    cycles: [501686]
+  group 3: size=1, rep=501688
+    warps: [1]
+    cycles: [501688]
+  group 4: size=1, rep=675219
+    warps: [5]
+    cycles: [675219]
+  group 5: size=1, rep=675223
+    warps: [4]
+    cycles: [675223]
+  group 6: size=1, rep=675351
+    warps: [7]
+    cycles: [675351]
+  group 7: size=1, rep=675353
+    warps: [6]
+    cycles: [675353]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 14
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 186.3524
+    k=2: 69.6914
+    k=3: 16.3607
+    k=4: 12.8755
+    k=5: 9.7041
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=35910.10526315789, accepted=True, total_error=6529.0526, max_error=3133.5263, sum_slices=104
+  merge_same_slice: enabled
+    merge slice=14: groups=[0, 1], merged_rep=505874, warp_count=4, dup_warps=0
+    merge slice=19: groups=[2, 3, 4, 5], merged_rep=682227, warp_count=4, dup_warps=0
+  group 0: size=3, rep=505873
+    warps: [0, 1, 2]
+    cycles: [505873, 505873, 505873]
+  group 1: size=1, rep=505875
+    warps: [3]
+    cycles: [505875]
+  group 2: size=1, rep=682159
+    warps: [5]
+    cycles: [682159]
+  group 3: size=1, rep=682163
+    warps: [4]
+    cycles: [682163]
+  group 4: size=1, rep=682291
+    warps: [7]
+    cycles: [682291]
+  group 5: size=1, rep=682293
+    warps: [6]
+    cycles: [682293]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 15
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 7
+  bic:
+    k=1: 186.4888
+    k=2: 68.1016
+    k=3: 36.1756
+    k=4: 26.2923
+    k=5: 19.1333
+    k=6: 13.8629
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=60825.36363636364, accepted=True, total_error=13786.2727, max_error=4669.0909, sum_slices=68
+  merge_same_slice: enabled
+    merge slice=8: groups=[0, 1, 2], merged_rep=491162, warp_count=4, dup_warps=0
+    merge slice=11: groups=[3, 4, 5, 6], merged_rep=669075, warp_count=4, dup_warps=0
+  group 0: size=1, rep=491146
+    warps: [2]
+    cycles: [491146]
+  group 1: size=1, rep=491162
+    warps: [0]
+    cycles: [491162]
+  group 2: size=2, rep=491272
+    warps: [1, 3]
+    cycles: [491272, 491272]
+  group 3: size=1, rep=669072
+    warps: [4]
+    cycles: [669072]
+  group 4: size=1, rep=669074
+    warps: [7]
+    cycles: [669074]
+  group 5: size=1, rep=669076
+    warps: [5]
+    cycles: [669076]
+  group 6: size=1, rep=669079
+    warps: [6]
+    cycles: [669079]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 16
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 181.7666
+    k=2: 69.6914
+    k=3: 16.3607
+    k=4: 12.8755
+    k=5: 9.7041
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=44700.63636363637, accepted=True, total_error=3527.8182, max_error=1631.9091, sum_slices=72
+  merge_same_slice: enabled
+    merge slice=11: groups=[0, 1, 2, 3], merged_rep=491773, warp_count=4, dup_warps=0
+    merge slice=14: groups=[4, 5], merged_rep=624178, warp_count=4, dup_warps=0
+  group 0: size=1, rep=491705
+    warps: [3]
+    cycles: [491705]
+  group 1: size=1, rep=491709
+    warps: [2]
+    cycles: [491709]
+  group 2: size=1, rep=491837
+    warps: [1]
+    cycles: [491837]
+  group 3: size=1, rep=491839
+    warps: [0]
+    cycles: [491839]
+  group 4: size=1, rep=624177
+    warps: [7]
+    cycles: [624177]
+  group 5: size=3, rep=624179
+    warps: [4, 5, 6]
+    cycles: [624179, 624179, 624179]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 17
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 186.6630
+    k=2: 86.1525
+    k=3: 70.9343
+    k=4: 43.2753
+    k=5: 12.9478
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=61710.4375, accepted=True, total_error=11146.6250, max_error=5147.8125, sum_slices=54
+  merge_same_slice: enabled
+    merge slice=8: groups=[0, 1, 2, 3], merged_rep=493892, warp_count=4, dup_warps=0
+    merge slice=11: groups=[4, 5], merged_rep=673668, warp_count=4, dup_warps=0
+  group 0: size=1, rep=493607
+    warps: [0]
+    cycles: [493607]
+  group 1: size=1, rep=493760
+    warps: [2]
+    cycles: [493760]
+  group 2: size=1, rep=494023
+    warps: [1]
+    cycles: [494023]
+  group 3: size=1, rep=494044
+    warps: [3]
+    cycles: [494044]
+  group 4: size=1, rep=673667
+    warps: [5]
+    cycles: [673667]
+  group 5: size=3, rep=673669
+    warps: [4, 6, 7]
+    cycles: [673669, 673669, 673669]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 18
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 186.5682
+    k=2: 77.5528
+    k=3: 68.9008
+    k=4: 38.6105
+    k=5: 30.4512
+    k=6: 23.2922
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=61189.01136363637, accepted=True, total_error=19278.1364, max_error=2699.1250, sum_slices=76
+  merge_same_slice: enabled
+    merge slice=8: groups=[0, 1, 2, 3], merged_rep=491668, warp_count=4, dup_warps=0
+    merge slice=11: groups=[4, 5, 6, 7], merged_rep=670383, warp_count=4, dup_warps=0
+  group 0: size=1, rep=491470
+    warps: [0]
+    cycles: [491470]
+  group 1: size=1, rep=491613
+    warps: [1]
+    cycles: [491613]
+  group 2: size=1, rep=491723
+    warps: [2]
+    cycles: [491723]
+  group 3: size=1, rep=491737
+    warps: [3]
+    cycles: [491737]
+  group 4: size=1, rep=670380
+    warps: [4]
+    cycles: [670380]
+  group 5: size=1, rep=670382
+    warps: [7]
+    cycles: [670382]
+  group 6: size=1, rep=670384
+    warps: [5]
+    cycles: [670384]
+  group 7: size=1, rep=670387
+    warps: [6]
+    cycles: [670387]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 19
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 185.8709
+    k=2: 76.6092
+    k=3: 66.9927
+    k=4: 42.6714
+    k=5: 30.4512
+    k=6: 23.2922
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=172272.0, accepted=True, total_error=4591.0000, max_error=699.0000, sum_slices=28
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1, 2, 3], merged_rep=517339, warp_count=4, dup_warps=0
+    merge slice=4: groups=[4, 5, 6, 7], merged_rep=688488, warp_count=4, dup_warps=0
+  group 0: size=1, rep=517263
+    warps: [1]
+    cycles: [517263]
+  group 1: size=1, rep=517282
+    warps: [3]
+    cycles: [517282]
+  group 2: size=1, rep=517396
+    warps: [2]
+    cycles: [517396]
+  group 3: size=1, rep=517515
+    warps: [0]
+    cycles: [517515]
+  group 4: size=1, rep=688485
+    warps: [5]
+    cycles: [688485]
+  group 5: size=1, rep=688487
+    warps: [4]
+    cycles: [688487]
+  group 6: size=1, rep=688489
+    warps: [6]
+    cycles: [688489]
+  group 7: size=1, rep=688492
+    warps: [7]
+    cycles: [688492]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 20
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 5
+  bic:
+    k=1: 186.5750
+    k=2: 68.8265
+    k=3: 9.7179
+    k=4: 7.8465
+    k=5: -161.6272
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=61328.625, accepted=True, total_error=10399.7500, max_error=5127.8750, sum_slices=46
+  merge_same_slice: enabled
+    merge slice=8: groups=[0, 1, 2], merged_rep=490631, warp_count=4, dup_warps=0
+    merge slice=11: groups=[3, 4], merged_rep=669488, warp_count=4, dup_warps=0
+  group 0: size=2, rep=490629
+    warps: [1, 2]
+    cycles: [490629, 490629]
+  group 1: size=1, rep=490631
+    warps: [3]
+    cycles: [490631]
+  group 2: size=1, rep=490773
+    warps: [0]
+    cycles: [490773]
+  group 3: size=1, rep=669487
+    warps: [5]
+    cycles: [669487]
+  group 4: size=3, rep=669489
+    warps: [4, 6, 7]
+    cycles: [669489, 669489, 669489]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 21
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 186.3893
+    k=2: 67.2555
+    k=3: 27.9962
+    k=4: 16.1192
+    k=5: 12.9478
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=45750.31818181818, accepted=True, total_error=12557.5455, max_error=6207.7727, sum_slices=74
+  merge_same_slice: enabled
+    merge slice=11: groups=[0, 1, 2, 3], merged_rep=503258, warp_count=4, dup_warps=0
+    merge slice=15: groups=[4, 5], merged_rep=680048, warp_count=4, dup_warps=0
+  group 0: size=1, rep=503252
+    warps: [4]
+    cycles: [503252]
+  group 1: size=1, rep=503255
+    warps: [6]
+    cycles: [503255]
+  group 2: size=1, rep=503262
+    warps: [7]
+    cycles: [503262]
+  group 3: size=1, rep=503386
+    warps: [5]
+    cycles: [503386]
+  group 4: size=1, rep=680047
+    warps: [1]
+    cycles: [680047]
+  group 5: size=3, rep=680049
+    warps: [0, 2, 3]
+    cycles: [680049, 680049, 680049]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 22
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 186.4015
+    k=2: 67.4920
+    k=3: 33.4024
+    k=4: 26.8691
+    k=5: 21.2794
+    k=6: 19.4081
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=166379.3333333333, accepted=True, total_error=42061.6667, max_error=5957.6667, sum_slices=28
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1, 2, 3], merged_rep=494546, warp_count=4, dup_warps=0
+    merge slice=4: groups=[4, 5, 6, 7], merged_rep=671471, warp_count=4, dup_warps=0
+  group 0: size=1, rep=494539
+    warps: [2]
+    cycles: [494539]
+  group 1: size=1, rep=494541
+    warps: [3]
+    cycles: [494541]
+  group 2: size=1, rep=494551
+    warps: [0]
+    cycles: [494551]
+  group 3: size=1, rep=494675
+    warps: [1]
+    cycles: [494675]
+  group 4: size=1, rep=671468
+    warps: [4]
+    cycles: [671468]
+  group 5: size=1, rep=671470
+    warps: [7]
+    cycles: [671470]
+  group 6: size=1, rep=671472
+    warps: [5]
+    cycles: [671472]
+  group 7: size=1, rep=671475
+    warps: [6]
+    cycles: [671475]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 23
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 186.6380
+    k=2: 69.0383
+    k=3: 28.4274
+    k=4: 28.3854
+    k=5: 25.5521
+    k=6: 23.2922
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=61416.88636363637, accepted=True, total_error=18888.6364, max_error=2675.7500, sum_slices=76
+  merge_same_slice: enabled
+    merge slice=8: groups=[0, 1, 2, 3], merged_rep=493419, warp_count=4, dup_warps=0
+    merge slice=11: groups=[4, 5, 6, 7], merged_rep=672913, warp_count=4, dup_warps=0
+  group 0: size=1, rep=493276
+    warps: [4]
+    cycles: [493276]
+  group 1: size=1, rep=493417
+    warps: [6]
+    cycles: [493417]
+  group 2: size=1, rep=493421
+    warps: [7]
+    cycles: [493421]
+  group 3: size=1, rep=493425
+    warps: [5]
+    cycles: [493425]
+  group 4: size=1, rep=672910
+    warps: [2]
+    cycles: [672910]
+  group 5: size=1, rep=672912
+    warps: [1]
+    cycles: [672912]
+  group 6: size=1, rep=672914
+    warps: [3]
+    cycles: [672914]
+  group 7: size=1, rep=672917
+    warps: [0]
+    cycles: [672917]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 24
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 186.2725
+    k=2: 81.0075
+    k=3: 52.7544
+    k=4: 26.8691
+    k=5: 21.2794
+    k=6: 19.4081
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=167276.0833333333, accepted=True, total_error=32793.6667, max_error=4600.6667, sum_slices=28
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1, 2, 3], merged_rep=498215, warp_count=4, dup_warps=0
+    merge slice=4: groups=[4, 5, 6, 7], merged_rep=673701, warp_count=4, dup_warps=0
+  group 0: size=1, rep=498094
+    warps: [3]
+    cycles: [498094]
+  group 1: size=1, rep=498096
+    warps: [0]
+    cycles: [498096]
+  group 2: size=1, rep=498334
+    warps: [2]
+    cycles: [498334]
+  group 3: size=1, rep=498383
+    warps: [1]
+    cycles: [498383]
+  group 4: size=1, rep=673698
+    warps: [6]
+    cycles: [673698]
+  group 5: size=1, rep=673700
+    warps: [5]
+    cycles: [673700]
+  group 6: size=1, rep=673702
+    warps: [7]
+    cycles: [673702]
+  group 7: size=1, rep=673705
+    warps: [4]
+    cycles: [673705]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 25
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 186.3942
+    k=2: 69.9168
+    k=3: 23.4198
+    k=4: 19.3034
+    k=5: 19.3358
+    k=6: 15.6481
+    k=7: 6.9315
+    k=8: -149.1506
+  slice_info: base=167723.5, accepted=True, total_error=36363.0000, max_error=5177.0000, sum_slices=28
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1, 2, 3], merged_rep=499290, warp_count=4, dup_warps=0
+    merge slice=4: groups=[4, 5, 6, 7], merged_rep=676067, warp_count=4, dup_warps=0
+  group 0: size=1, rep=499138
+    warps: [4]
+    cycles: [499138]
+  group 1: size=1, rep=499290
+    warps: [6]
+    cycles: [499290]
+  group 2: size=1, rep=499291
+    warps: [5]
+    cycles: [499291]
+  group 3: size=1, rep=499293
+    warps: [7]
+    cycles: [499293]
+  group 4: size=1, rep=676064
+    warps: [0]
+    cycles: [676064]
+  group 5: size=1, rep=676066
+    warps: [3]
+    cycles: [676066]
+  group 6: size=1, rep=676068
+    warps: [1]
+    cycles: [676068]
+  group 7: size=1, rep=676071
+    warps: [2]
+    cycles: [676071]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 26
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 180.9141
+    k=2: 81.8437
+    k=3: 69.6789
+    k=4: 26.5135
+    k=5: 12.9478
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=123714.375, accepted=True, total_error=4094.2500, max_error=1724.1250, sum_slices=26
+  merge_same_slice: enabled
+    merge slice=4: groups=[0, 1, 2, 3], merged_rep=494726, warp_count=4, dup_warps=0
+    merge slice=5: groups=[4, 5], merged_rep=620295, warp_count=4, dup_warps=0
+  group 0: size=1, rep=494602
+    warps: [0]
+    cycles: [494602]
+  group 1: size=1, rep=494722
+    warps: [2]
+    cycles: [494722]
+  group 2: size=1, rep=494729
+    warps: [1]
+    cycles: [494729]
+  group 3: size=1, rep=494986
+    warps: [3]
+    cycles: [494986]
+  group 4: size=1, rep=620294
+    warps: [4]
+    cycles: [620294]
+  group 5: size=3, rep=620296
+    warps: [5, 6, 7]
+    cycles: [620296, 620296, 620296]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 27
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 7
+  bic:
+    k=1: 186.2696
+    k=2: 75.9650
+    k=3: 73.8499
+    k=4: 19.8793
+    k=5: 15.2492
+    k=6: 13.8629
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=44999.53333333333, accepted=True, total_error=13663.4000, max_error=4561.1333, sum_slices=93
+  merge_same_slice: enabled
+    merge slice=11: groups=[0, 1, 2], merged_rep=499414, warp_count=4, dup_warps=0
+    merge slice=15: groups=[3, 4, 5, 6], merged_rep=674927, warp_count=4, dup_warps=0
+  group 0: size=1, rep=499412
+    warps: [1]
+    cycles: [499412]
+  group 1: size=1, rep=499414
+    warps: [0]
+    cycles: [499414]
+  group 2: size=2, rep=499556
+    warps: [2, 3]
+    cycles: [499556, 499556]
+  group 3: size=1, rep=674859
+    warps: [5]
+    cycles: [674859]
+  group 4: size=1, rep=674863
+    warps: [4]
+    cycles: [674863]
+  group 5: size=1, rep=674991
+    warps: [7]
+    cycles: [674991]
+  group 6: size=1, rep=674993
+    warps: [6]
+    cycles: [674993]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 28
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 186.3787
+    k=2: 67.4774
+    k=3: 31.4448
+    k=4: 12.8755
+    k=5: 9.7041
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=45416.72727272727, accepted=True, total_error=10123.8182, max_error=4988.9091, sum_slices=74
+  merge_same_slice: enabled
+    merge slice=11: groups=[0, 1, 2, 3], merged_rep=499590, warp_count=4, dup_warps=0
+    merge slice=15: groups=[4, 5], merged_rep=676263, warp_count=4, dup_warps=0
+  group 0: size=1, rep=499583
+    warps: [2]
+    cycles: [499583]
+  group 1: size=1, rep=499585
+    warps: [3]
+    cycles: [499585]
+  group 2: size=1, rep=499595
+    warps: [0]
+    cycles: [499595]
+  group 3: size=1, rep=499719
+    warps: [1]
+    cycles: [499719]
+  group 4: size=1, rep=676262
+    warps: [4]
+    cycles: [676262]
+  group 5: size=3, rep=676264
+    warps: [5, 6, 7]
+    cycles: [676264, 676264, 676264]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 29
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 186.7902
+    k=2: 68.7136
+    k=3: 42.8779
+    k=4: 28.4428
+    k=5: 12.9478
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=61672.75, accepted=True, total_error=7640.5000, max_error=3732.2500, sum_slices=54
+  merge_same_slice: enabled
+    merge slice=8: groups=[0, 1, 2, 3], merged_rep=493395, warp_count=4, dup_warps=0
+    merge slice=11: groups=[4, 5], merged_rep=674669, warp_count=4, dup_warps=0
+  group 0: size=1, rep=493378
+    warps: [0]
+    cycles: [493378]
+  group 1: size=1, rep=493386
+    warps: [1]
+    cycles: [493386]
+  group 2: size=1, rep=493404
+    warps: [2]
+    cycles: [493404]
+  group 3: size=1, rep=493530
+    warps: [3]
+    cycles: [493530]
+  group 4: size=1, rep=674668
+    warps: [6]
+    cycles: [674668]
+  group 5: size=3, rep=674670
+    warps: [4, 5, 7]
+    cycles: [674670, 674670, 674670]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 30
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 186.7417
+    k=2: 87.6057
+    k=3: 73.8557
+    k=4: 25.5894
+    k=5: 24.0381
+    k=6: 19.4081
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=61396.079545454544, accepted=True, total_error=13967.9545, max_error=2005.8750, sum_slices=76
+  merge_same_slice: enabled
+    merge slice=8: groups=[0, 1, 2, 3], merged_rep=492723, warp_count=4, dup_warps=0
+    merge slice=11: groups=[4, 5, 6, 7], merged_rep=673419, warp_count=4, dup_warps=0
+  group 0: size=1, rep=492530
+    warps: [5]
+    cycles: [492530]
+  group 1: size=1, rep=492535
+    warps: [7]
+    cycles: [492535]
+  group 2: size=1, rep=492911
+    warps: [6]
+    cycles: [492911]
+  group 3: size=1, rep=492913
+    warps: [4]
+    cycles: [492913]
+  group 4: size=1, rep=673351
+    warps: [1]
+    cycles: [673351]
+  group 5: size=1, rep=673355
+    warps: [0]
+    cycles: [673355]
+  group 6: size=1, rep=673483
+    warps: [3]
+    cycles: [673483]
+  group 7: size=1, rep=673485
+    warps: [2]
+    cycles: [673485]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 31
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 186.3804
+    k=2: 80.1004
+    k=3: 61.6251
+    k=4: 34.5399
+    k=5: 12.9478
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=45342.818181818184, accepted=True, total_error=9622.5455, max_error=4616.2727, sum_slices=74
+  merge_same_slice: enabled
+    merge slice=11: groups=[0, 1, 2, 3], merged_rep=498811, warp_count=4, dup_warps=0
+    merge slice=15: groups=[4, 5], merged_rep=675527, warp_count=4, dup_warps=0
+  group 0: size=1, rep=498765
+    warps: [2]
+    cycles: [498765]
+  group 1: size=1, rep=498777
+    warps: [1]
+    cycles: [498777]
+  group 2: size=1, rep=498845
+    warps: [0]
+    cycles: [498845]
+  group 3: size=1, rep=499077
+    warps: [3]
+    cycles: [499077]
+  group 4: size=1, rep=675526
+    warps: [4]
+    cycles: [675526]
+  group 5: size=3, rep=675528
+    warps: [5, 6, 7]
+    cycles: [675528, 675528, 675528]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 32
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 5
+  bic:
+    k=1: 181.9244
+    k=2: 67.2492
+    k=3: 26.4121
+    k=4: 8.7889
+    k=5: -161.6272
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=69925.28571428571, accepted=True, total_error=12333.1429, max_error=6036.5714, sum_slices=39
+  merge_same_slice: enabled
+    merge slice=7: groups=[0, 1, 2], merged_rep=489604, warp_count=4, dup_warps=0
+    merge slice=9: groups=[3, 4], merged_rep=623292, warp_count=4, dup_warps=0
+  group 0: size=1, rep=489477
+    warps: [5]
+    cycles: [489477]
+  group 1: size=2, rep=489604
+    warps: [4, 6]
+    cycles: [489604, 489604]
+  group 2: size=1, rep=489612
+    warps: [7]
+    cycles: [489612]
+  group 3: size=1, rep=623291
+    warps: [1]
+    cycles: [623291]
+  group 4: size=3, rep=623293
+    warps: [0, 2, 3]
+    cycles: [623293, 623293, 623293]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 33
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 4
+  bic:
+    k=1: 181.7474
+    k=2: 6.0163
+    k=3: 4.6300
+    k=4: -165.7861
+    k=5: -161.6272
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=124214.525, accepted=True, total_error=16064.9500, max_error=4463.3750, sum_slices=18
+  merge_same_slice: enabled
+    merge slice=4: groups=[0, 1], merged_rep=493288, warp_count=4, dup_warps=0
+    merge slice=5: groups=[2, 3], merged_rep=625535, warp_count=4, dup_warps=0
+  group 0: size=1, rep=493287
+    warps: [1]
+    cycles: [493287]
+  group 1: size=3, rep=493289
+    warps: [0, 2, 3]
+    cycles: [493289, 493289, 493289]
+  group 2: size=1, rep=625534
+    warps: [4]
+    cycles: [625534]
+  group 3: size=3, rep=625536
+    warps: [5, 6, 7]
+    cycles: [625536, 625536, 625536]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 34
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 5
+  bic:
+    k=1: 181.9429
+    k=2: 68.5493
+    k=3: 8.7166
+    k=4: 5.5452
+    k=5: -161.6272
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=69752.42857142857, accepted=True, total_error=11264.7143, max_error=5570.8571, sum_slices=39
+  merge_same_slice: enabled
+    merge slice=7: groups=[0, 1, 2], merged_rep=488269, warp_count=4, dup_warps=0
+    merge slice=9: groups=[3, 4], merged_rep=622202, warp_count=4, dup_warps=0
+  group 0: size=1, rep=488267
+    warps: [6]
+    cycles: [488267]
+  group 1: size=1, rep=488269
+    warps: [7]
+    cycles: [488269]
+  group 2: size=2, rep=488390
+    warps: [4, 5]
+    cycles: [488390, 488390]
+  group 3: size=1, rep=622201
+    warps: [3]
+    cycles: [622201]
+  group 4: size=3, rep=622203
+    warps: [0, 1, 2]
+    cycles: [622203, 622203, 622203]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 35
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 185.6796
+    k=2: 79.6005
+    k=3: 64.3070
+    k=4: 16.1192
+    k=5: 12.9478
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=169821.33333333334, accepted=True, total_error=1795.6667, max_error=615.3333, sum_slices=20
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1, 2, 3], merged_rep=509605, warp_count=4, dup_warps=0
+    merge slice=4: groups=[4, 5], merged_rep=678671, warp_count=4, dup_warps=0
+  group 0: size=1, rep=509413
+    warps: [2]
+    cycles: [509413]
+  group 1: size=1, rep=509515
+    warps: [3]
+    cycles: [509515]
+  group 2: size=1, rep=509695
+    warps: [1]
+    cycles: [509695]
+  group 3: size=1, rep=509698
+    warps: [0]
+    cycles: [509698]
+  group 4: size=1, rep=678670
+    warps: [4]
+    cycles: [678670]
+  group 5: size=3, rep=678672
+    warps: [5, 6, 7]
+    cycles: [678672, 678672, 678672]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 36
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 186.3805
+    k=2: 71.0692
+    k=3: 32.3141
+    k=4: 19.1832
+    k=5: 12.9478
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=45375.5, accepted=True, total_error=9835.0000, max_error=4769.5000, sum_slices=74
+  merge_same_slice: enabled
+    merge slice=11: groups=[0, 1, 2, 3], merged_rep=499204, warp_count=4, dup_warps=0
+    merge slice=15: groups=[4, 5], merged_rep=675864, warp_count=4, dup_warps=0
+  group 0: size=1, rep=499124
+    warps: [2]
+    cycles: [499124]
+  group 1: size=1, rep=499137
+    warps: [1]
+    cycles: [499137]
+  group 2: size=1, rep=499271
+    warps: [0]
+    cycles: [499271]
+  group 3: size=1, rep=499275
+    warps: [3]
+    cycles: [499275]
+  group 4: size=1, rep=675863
+    warps: [5]
+    cycles: [675863]
+  group 5: size=3, rep=675865
+    warps: [4, 6, 7]
+    cycles: [675865, 675865, 675865]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 37
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 180.6818
+    k=2: 70.4980
+    k=3: 31.7950
+    k=4: 12.8755
+    k=5: 9.7041
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=125571.875, accepted=True, total_error=3842.7500, max_error=1778.3750, sum_slices=26
+  merge_same_slice: enabled
+    merge slice=4: groups=[0, 1, 2, 3], merged_rep=502359, warp_count=4, dup_warps=0
+    merge slice=5: groups=[4, 5], merged_rep=626082, warp_count=4, dup_warps=0
+  group 0: size=1, rep=502281
+    warps: [1]
+    cycles: [502281]
+  group 1: size=1, rep=502294
+    warps: [3]
+    cycles: [502294]
+  group 2: size=1, rep=502424
+    warps: [0]
+    cycles: [502424]
+  group 3: size=1, rep=502426
+    warps: [2]
+    cycles: [502426]
+  group 4: size=1, rep=626081
+    warps: [7]
+    cycles: [626081]
+  group 5: size=3, rep=626083
+    warps: [4, 5, 6]
+    cycles: [626083, 626083, 626083]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 38
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 186.4797
+    k=2: 97.7175
+    k=3: 41.2757
+    k=4: 29.3596
+    k=5: 27.7144
+    k=6: 23.2922
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=61669.89772727273, accepted=True, total_error=28993.7727, max_error=4069.8750, sum_slices=76
+  merge_same_slice: enabled
+    merge slice=8: groups=[0, 1, 2, 3], merged_rep=496328, warp_count=4, dup_warps=0
+    merge slice=11: groups=[4, 5, 6, 7], merged_rep=674302, warp_count=4, dup_warps=0
+  group 0: size=1, rep=496314
+    warps: [7]
+    cycles: [496314]
+  group 1: size=1, rep=496319
+    warps: [5]
+    cycles: [496319]
+  group 2: size=1, rep=496336
+    warps: [6]
+    cycles: [496336]
+  group 3: size=1, rep=497195
+    warps: [4]
+    cycles: [497195]
+  group 4: size=1, rep=674299
+    warps: [3]
+    cycles: [674299]
+  group 5: size=1, rep=674301
+    warps: [2]
+    cycles: [674301]
+  group 6: size=1, rep=674303
+    warps: [0]
+    cycles: [674303]
+  group 7: size=1, rep=674306
+    warps: [1]
+    cycles: [674306]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 39
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 180.9552
+    k=2: 77.2439
+    k=3: 71.9489
+    k=4: 10.0221
+    k=5: -1.3863
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=124779.0, accepted=True, total_error=2450.0000, max_error=1006.0000, sum_slices=26
+  merge_same_slice: enabled
+    merge slice=4: groups=[0, 1, 2, 3], merged_rep=499044, warp_count=4, dup_warps=0
+    merge slice=5: groups=[4, 5], merged_rep=624900, warp_count=4, dup_warps=0
+  group 0: size=1, rep=498890
+    warps: [0]
+    cycles: [498890]
+  group 1: size=1, rep=499044
+    warps: [3]
+    cycles: [499044]
+  group 2: size=1, rep=499045
+    warps: [1]
+    cycles: [499045]
+  group 3: size=1, rep=499187
+    warps: [2]
+    cycles: [499187]
+  group 4: size=1, rep=624899
+    warps: [5]
+    cycles: [624899]
+  group 5: size=3, rep=624901
+    warps: [4, 6, 7]
+    cycles: [624901, 624901, 624901]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 40
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 185.6235
+    k=2: 70.5743
+    k=3: 46.0793
+    k=4: 19.1832
+    k=5: 12.9478
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=169324.3333333333, accepted=True, total_error=1753.6667, max_error=778.3333, sum_slices=20
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1, 2, 3], merged_rep=507988, warp_count=4, dup_warps=0
+    merge slice=4: groups=[4, 5], merged_rep=676520, warp_count=4, dup_warps=0
+  group 0: size=1, rep=507971
+    warps: [1]
+    cycles: [507971]
+  group 1: size=1, rep=507975
+    warps: [3]
+    cycles: [507975]
+  group 2: size=1, rep=508001
+    warps: [0]
+    cycles: [508001]
+  group 3: size=1, rep=508140
+    warps: [2]
+    cycles: [508140]
+  group 4: size=1, rep=676519
+    warps: [5]
+    cycles: [676519]
+  group 5: size=3, rep=676521
+    warps: [4, 6, 7]
+    cycles: [676521, 676521, 676521]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 41
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 186.3443
+    k=2: 67.4920
+    k=3: 33.4024
+    k=4: 26.8691
+    k=5: 21.2794
+    k=6: 19.4081
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=167441.75, accepted=True, total_error=35288.0000, max_error=4990.0000, sum_slices=28
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1, 2, 3], merged_rep=498459, warp_count=4, dup_warps=0
+    merge slice=4: groups=[4, 5, 6, 7], merged_rep=674753, warp_count=4, dup_warps=0
+  group 0: size=1, rep=498452
+    warps: [3]
+    cycles: [498452]
+  group 1: size=1, rep=498454
+    warps: [0]
+    cycles: [498454]
+  group 2: size=1, rep=498464
+    warps: [1]
+    cycles: [498464]
+  group 3: size=1, rep=498588
+    warps: [2]
+    cycles: [498588]
+  group 4: size=1, rep=674750
+    warps: [6]
+    cycles: [674750]
+  group 5: size=1, rep=674752
+    warps: [5]
+    cycles: [674752]
+  group 6: size=1, rep=674754
+    warps: [7]
+    cycles: [674754]
+  group 7: size=1, rep=674757
+    warps: [4]
+    cycles: [674757]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 42
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 186.1126
+    k=2: 86.5671
+    k=3: 81.0117
+    k=4: 78.0087
+    k=5: 24.0381
+    k=6: 19.4081
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=169196.2083333333, accepted=True, total_error=18134.1667, max_error=2532.1667, sum_slices=28
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1, 2, 3], merged_rep=505466, warp_count=4, dup_warps=0
+    merge slice=4: groups=[4, 5, 6, 7], merged_rep=679251, warp_count=4, dup_warps=0
+  group 0: size=1, rep=505362
+    warps: [0]
+    cycles: [505362]
+  group 1: size=1, rep=505364
+    warps: [3]
+    cycles: [505364]
+  group 2: size=1, rep=505567
+    warps: [1]
+    cycles: [505567]
+  group 3: size=1, rep=505790
+    warps: [2]
+    cycles: [505790]
+  group 4: size=1, rep=679183
+    warps: [5]
+    cycles: [679183]
+  group 5: size=1, rep=679187
+    warps: [4]
+    cycles: [679187]
+  group 6: size=1, rep=679315
+    warps: [7]
+    cycles: [679315]
+  group 7: size=1, rep=679317
+    warps: [6]
+    cycles: [679317]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 43
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 186.4055
+    k=2: 69.5090
+    k=3: 28.7826
+    k=4: 26.8691
+    k=5: 21.2794
+    k=6: 19.4081
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=167479.5833333333, accepted=True, total_error=37838.6667, max_error=5346.6667, sum_slices=28
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1, 2, 3], merged_rep=498287, warp_count=4, dup_warps=0
+    merge slice=4: groups=[4, 5, 6, 7], merged_rep=675261, warp_count=4, dup_warps=0
+  group 0: size=1, rep=498280
+    warps: [2]
+    cycles: [498280]
+  group 1: size=1, rep=498286
+    warps: [3]
+    cycles: [498286]
+  group 2: size=1, rep=498288
+    warps: [0]
+    cycles: [498288]
+  group 3: size=1, rep=498434
+    warps: [1]
+    cycles: [498434]
+  group 4: size=1, rep=675258
+    warps: [6]
+    cycles: [675258]
+  group 5: size=1, rep=675260
+    warps: [5]
+    cycles: [675260]
+  group 6: size=1, rep=675262
+    warps: [7]
+    cycles: [675262]
+  group 7: size=1, rep=675265
+    warps: [4]
+    cycles: [675265]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 44
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 186.5737
+    k=2: 76.5416
+    k=3: 73.8520
+    k=4: 22.4269
+    k=5: 21.2794
+    k=6: 19.4081
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=61200.579545454544, accepted=True, total_error=19169.9545, max_error=2825.3750, sum_slices=76
+  merge_same_slice: enabled
+    merge slice=8: groups=[0, 1, 2, 3], merged_rep=491639, warp_count=4, dup_warps=0
+    merge slice=11: groups=[4, 5, 6, 7], merged_rep=670449, warp_count=4, dup_warps=0
+  group 0: size=1, rep=491562
+    warps: [6]
+    cycles: [491562]
+  group 1: size=1, rep=491564
+    warps: [7]
+    cycles: [491564]
+  group 2: size=1, rep=491714
+    warps: [4]
+    cycles: [491714]
+  group 3: size=1, rep=491717
+    warps: [5]
+    cycles: [491717]
+  group 4: size=1, rep=670381
+    warps: [3]
+    cycles: [670381]
+  group 5: size=1, rep=670385
+    warps: [2]
+    cycles: [670385]
+  group 6: size=1, rep=670513
+    warps: [1]
+    cycles: [670513]
+  group 7: size=1, rep=670515
+    warps: [0]
+    cycles: [670515]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 45
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 185.4315
+    k=2: 76.3789
+    k=3: 74.0867
+    k=4: 50.1528
+    k=5: 40.5477
+    k=6: 26.7384
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=169565.25, accepted=True, total_error=12306.0000, max_error=1821.0000, sum_slices=28
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1, 2, 3], merged_rep=509984, warp_count=4, dup_warps=0
+    merge slice=4: groups=[4, 5, 6, 7], merged_rep=676508, warp_count=4, dup_warps=0
+  group 0: size=1, rep=509961
+    warps: [5]
+    cycles: [509961]
+  group 1: size=1, rep=509974
+    warps: [6]
+    cycles: [509974]
+  group 2: size=1, rep=509993
+    warps: [4]
+    cycles: [509993]
+  group 3: size=1, rep=510147
+    warps: [7]
+    cycles: [510147]
+  group 4: size=1, rep=676440
+    warps: [2]
+    cycles: [676440]
+  group 5: size=1, rep=676444
+    warps: [1]
+    cycles: [676444]
+  group 6: size=1, rep=676572
+    warps: [0]
+    cycles: [676572]
+  group 7: size=1, rep=676574
+    warps: [3]
+    cycles: [676574]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 46
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 186.3291
+    k=2: 74.4063
+    k=3: 72.1009
+    k=4: 39.0624
+    k=5: 22.9699
+    k=6: 15.6481
+    k=7: 6.9315
+    k=8: -149.1506
+  slice_info: base=169772.25, accepted=True, total_error=25296.0000, max_error=3687.0000, sum_slices=28
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1, 2, 3], merged_rep=506644, warp_count=4, dup_warps=0
+    merge slice=4: groups=[4, 5, 6, 7], merged_rep=682710, warp_count=4, dup_warps=0
+  group 0: size=1, rep=506512
+    warps: [1]
+    cycles: [506512]
+  group 1: size=1, rep=506638
+    warps: [2]
+    cycles: [506638]
+  group 2: size=1, rep=506651
+    warps: [0]
+    cycles: [506651]
+  group 3: size=1, rep=506652
+    warps: [3]
+    cycles: [506652]
+  group 4: size=1, rep=682642
+    warps: [4]
+    cycles: [682642]
+  group 5: size=1, rep=682646
+    warps: [7]
+    cycles: [682646]
+  group 6: size=1, rep=682774
+    warps: [6]
+    cycles: [682774]
+  group 7: size=1, rep=682776
+    warps: [5]
+    cycles: [682776]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 47
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 180.6563
+    k=2: 67.4539
+    k=3: 32.8016
+    k=4: 10.0221
+    k=5: -1.3863
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=125820.0, accepted=True, total_error=4709.0000, max_error=2235.0000, sum_slices=26
+  merge_same_slice: enabled
+    merge slice=4: groups=[0, 1, 2, 3], merged_rep=503340, warp_count=4, dup_warps=0
+    merge slice=5: groups=[4, 5], merged_rep=626866, warp_count=4, dup_warps=0
+  group 0: size=1, rep=503273
+    warps: [3]
+    cycles: [503273]
+  group 1: size=1, rep=503287
+    warps: [0]
+    cycles: [503287]
+  group 2: size=1, rep=503393
+    warps: [1]
+    cycles: [503393]
+  group 3: size=1, rep=503394
+    warps: [2]
+    cycles: [503394]
+  group 4: size=1, rep=626865
+    warps: [7]
+    cycles: [626865]
+  group 5: size=3, rep=626867
+    warps: [4, 5, 6]
+    cycles: [626867, 626867, 626867]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 48
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 4
+  bic:
+    k=1: 186.4602
+    k=2: 68.2185
+    k=3: 4.6300
+    k=4: -165.7861
+    k=5: -161.6272
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=167266.0833333333, accepted=True, total_error=20487.8333, max_error=5815.6667, sum_slices=14
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1], merged_rep=497369, warp_count=4, dup_warps=0
+    merge slice=4: groups=[2, 3], merged_rep=674879, warp_count=4, dup_warps=0
+  group 0: size=3, rep=497300
+    warps: [0, 1, 2]
+    cycles: [497300, 497300, 497300]
+  group 1: size=1, rep=497438
+    warps: [3]
+    cycles: [497438]
+  group 2: size=1, rep=674878
+    warps: [4]
+    cycles: [674878]
+  group 3: size=3, rep=674880
+    warps: [5, 6, 7]
+    cycles: [674880, 674880, 674880]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 49
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 180.9735
+    k=2: 74.1704
+    k=3: 67.0662
+    k=4: 12.8755
+    k=5: 9.7041
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=123939.75, accepted=True, total_error=4352.5000, max_error=2002.2500, sum_slices=26
+  merge_same_slice: enabled
+    merge slice=4: groups=[0, 1, 2, 3], merged_rep=495706, warp_count=4, dup_warps=0
+    merge slice=5: groups=[4, 5], merged_rep=621700, warp_count=4, dup_warps=0
+  group 0: size=1, rep=495567
+    warps: [0]
+    cycles: [495567]
+  group 1: size=1, rep=495705
+    warps: [2]
+    cycles: [495705]
+  group 2: size=1, rep=495707
+    warps: [1]
+    cycles: [495707]
+  group 3: size=1, rep=495811
+    warps: [3]
+    cycles: [495811]
+  group 4: size=1, rep=621699
+    warps: [5]
+    cycles: [621699]
+  group 5: size=3, rep=621701
+    warps: [4, 6, 7]
+    cycles: [621701, 621701, 621701]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 50
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 7
+  bic:
+    k=1: 186.1302
+    k=2: 72.4704
+    k=3: 70.5515
+    k=4: 35.5725
+    k=5: 16.4824
+    k=6: 13.8629
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=171615.25, accepted=True, total_error=6983.2500, max_error=2359.7500, sum_slices=25
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1, 2], merged_rep=512608, warp_count=4, dup_warps=0
+    merge slice=4: groups=[3, 4, 5, 6], merged_rep=686468, warp_count=4, dup_warps=0
+  group 0: size=1, rep=512486
+    warps: [4]
+    cycles: [512486]
+  group 1: size=2, rep=512608
+    warps: [5, 7]
+    cycles: [512608, 512608]
+  group 2: size=1, rep=512610
+    warps: [6]
+    cycles: [512610]
+  group 3: size=1, rep=686461
+    warps: [0]
+    cycles: [686461]
+  group 4: size=1, rep=686463
+    warps: [1]
+    cycles: [686463]
+  group 5: size=1, rep=686473
+    warps: [2]
+    cycles: [686473]
+  group 6: size=1, rep=686597
+    warps: [3]
+    cycles: [686597]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 51
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 186.2221
+    k=2: 18.8249
+    k=3: 13.8515
+    k=4: 12.8755
+    k=5: 9.7041
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=35524.92105263158, accepted=True, total_error=5410.2105, max_error=2700.1053, sum_slices=104
+  merge_same_slice: enabled
+    merge slice=14: groups=[0, 1], merged_rep=500048, warp_count=4, dup_warps=0
+    merge slice=19: groups=[2, 3, 4, 5], merged_rep=674971, warp_count=4, dup_warps=0
+  group 0: size=1, rep=500047
+    warps: [1]
+    cycles: [500047]
+  group 1: size=3, rep=500049
+    warps: [0, 2, 3]
+    cycles: [500049, 500049, 500049]
+  group 2: size=1, rep=674968
+    warps: [4]
+    cycles: [674968]
+  group 3: size=1, rep=674970
+    warps: [7]
+    cycles: [674970]
+  group 4: size=1, rep=674972
+    warps: [5]
+    cycles: [674972]
+  group 5: size=1, rep=674975
+    warps: [6]
+    cycles: [674975]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 52
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 186.3102
+    k=2: 67.4774
+    k=3: 31.4448
+    k=4: 12.8755
+    k=5: 9.7041
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=45440.63636363637, accepted=True, total_error=11825.0909, max_error=5839.5455, sum_slices=74
+  merge_same_slice: enabled
+    merge slice=11: groups=[0, 1, 2, 3], merged_rep=499853, warp_count=4, dup_warps=0
+    merge slice=15: groups=[4, 5], merged_rep=675771, warp_count=4, dup_warps=0
+  group 0: size=1, rep=499846
+    warps: [1]
+    cycles: [499846]
+  group 1: size=1, rep=499848
+    warps: [2]
+    cycles: [499848]
+  group 2: size=1, rep=499858
+    warps: [3]
+    cycles: [499858]
+  group 3: size=1, rep=499982
+    warps: [0]
+    cycles: [499982]
+  group 4: size=1, rep=675770
+    warps: [4]
+    cycles: [675770]
+  group 5: size=3, rep=675772
+    warps: [5, 6, 7]
+    cycles: [675772, 675772, 675772]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 53
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 7
+  bic:
+    k=1: 185.9167
+    k=2: 93.5355
+    k=3: 73.8502
+    k=4: 20.3118
+    k=5: 16.4824
+    k=6: 13.8629
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=172674.5, accepted=True, total_error=3081.5000, max_error=1157.5000, sum_slices=25
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1, 2], merged_rep=519179, warp_count=4, dup_warps=0
+    merge slice=4: groups=[3, 4, 5, 6], merged_rep=690632, warp_count=4, dup_warps=0
+  group 0: size=1, rep=518526
+    warps: [0]
+    cycles: [518526]
+  group 1: size=1, rep=519179
+    warps: [2]
+    cycles: [519179]
+  group 2: size=2, rep=519181
+    warps: [1, 3]
+    cycles: [519181, 519181]
+  group 3: size=1, rep=690564
+    warps: [6]
+    cycles: [690564]
+  group 4: size=1, rep=690568
+    warps: [5]
+    cycles: [690568]
+  group 5: size=1, rep=690696
+    warps: [4]
+    cycles: [690696]
+  group 6: size=1, rep=690698
+    warps: [7]
+    cycles: [690698]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 54
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 181.9510
+    k=2: 81.7069
+    k=3: 71.4555
+    k=4: 28.4428
+    k=5: 12.9478
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=70006.5, accepted=True, total_error=12585.0000, max_error=5975.5000, sum_slices=46
+  merge_same_slice: enabled
+    merge slice=7: groups=[0, 1, 2, 3], merged_rep=490171, warp_count=4, dup_warps=0
+    merge slice=9: groups=[4, 5], merged_rep=624084, warp_count=4, dup_warps=0
+  group 0: size=1, rep=489924
+    warps: [0]
+    cycles: [489924]
+  group 1: size=1, rep=490167
+    warps: [1]
+    cycles: [490167]
+  group 2: size=1, rep=490175
+    warps: [2]
+    cycles: [490175]
+  group 3: size=1, rep=490309
+    warps: [3]
+    cycles: [490309]
+  group 4: size=1, rep=624083
+    warps: [5]
+    cycles: [624083]
+  group 5: size=3, rep=624085
+    warps: [4, 6, 7]
+    cycles: [624085, 624085, 624085]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 55
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 185.2185
+    k=2: 76.7064
+    k=3: 66.4637
+    k=4: 40.3345
+    k=5: 30.4512
+    k=6: 23.2922
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=169124.9166666667, accepted=True, total_error=19351.6667, max_error=2700.6667, sum_slices=28
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1, 2, 3], merged_rep=509495, warp_count=4, dup_warps=0
+    merge slice=4: groups=[4, 5, 6, 7], merged_rep=673802, warp_count=4, dup_warps=0
+  group 0: size=1, rep=509395
+    warps: [0]
+    cycles: [509395]
+  group 1: size=1, rep=509487
+    warps: [3]
+    cycles: [509487]
+  group 2: size=1, rep=509503
+    warps: [2]
+    cycles: [509503]
+  group 3: size=1, rep=509676
+    warps: [1]
+    cycles: [509676]
+  group 4: size=1, rep=673799
+    warps: [7]
+    cycles: [673799]
+  group 5: size=1, rep=673801
+    warps: [6]
+    cycles: [673801]
+  group 6: size=1, rep=673803
+    warps: [4]
+    cycles: [673803]
+  group 7: size=1, rep=673806
+    warps: [5]
+    cycles: [673806]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 56
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 7
+  bic:
+    k=1: 186.0820
+    k=2: 73.3151
+    k=3: 69.4054
+    k=4: 37.3075
+    k=5: 22.5796
+    k=6: 13.8629
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=172650.25, accepted=True, total_error=2283.2500, max_error=715.7500, sum_slices=25
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1, 2], merged_rep=517247, warp_count=4, dup_warps=0
+    merge slice=4: groups=[3, 4, 5, 6], merged_rep=690669, warp_count=4, dup_warps=0
+  group 0: size=1, rep=517235
+    warps: [4]
+    cycles: [517235]
+  group 1: size=2, rep=517247
+    warps: [5, 6]
+    cycles: [517247, 517247]
+  group 2: size=1, rep=517357
+    warps: [7]
+    cycles: [517357]
+  group 3: size=1, rep=690601
+    warps: [3]
+    cycles: [690601]
+  group 4: size=1, rep=690605
+    warps: [2]
+    cycles: [690605]
+  group 5: size=1, rep=690733
+    warps: [1]
+    cycles: [690733]
+  group 6: size=1, rep=690735
+    warps: [0]
+    cycles: [690735]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 57
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 4
+  bic:
+    k=1: 181.7383
+    k=2: 6.0163
+    k=3: 4.6300
+    k=4: -165.7861
+    k=5: -161.6272
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=121709.075, accepted=True, total_error=20925.8500, max_error=5813.6250, sum_slices=18
+  merge_same_slice: enabled
+    merge slice=4: groups=[0, 1], merged_rep=482186, warp_count=4, dup_warps=0
+    merge slice=5: groups=[2, 3], merged_rep=614358, warp_count=4, dup_warps=0
+  group 0: size=1, rep=482185
+    warps: [3]
+    cycles: [482185]
+  group 1: size=3, rep=482187
+    warps: [0, 1, 2]
+    cycles: [482187, 482187, 482187]
+  group 2: size=1, rep=614357
+    warps: [7]
+    cycles: [614357]
+  group 3: size=3, rep=614359
+    warps: [4, 5, 6]
+    cycles: [614359, 614359, 614359]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 58
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 7
+  bic:
+    k=1: 186.5622
+    k=2: 74.5683
+    k=3: 72.4599
+    k=4: 20.3118
+    k=5: 16.4824
+    k=6: 13.8629
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=61081.545454545456, accepted=True, total_error=13792.9091, max_error=4601.6364, sum_slices=68
+  merge_same_slice: enabled
+    merge slice=8: groups=[0, 1, 2], merged_rep=493116, warp_count=4, dup_warps=0
+    merge slice=11: groups=[3, 4, 5, 6], merged_rep=671831, warp_count=4, dup_warps=0
+  group 0: size=1, rep=493114
+    warps: [5]
+    cycles: [493114]
+  group 1: size=2, rep=493116
+    warps: [6, 7]
+    cycles: [493116, 493116]
+  group 2: size=1, rep=493254
+    warps: [4]
+    cycles: [493254]
+  group 3: size=1, rep=671763
+    warps: [1]
+    cycles: [671763]
+  group 4: size=1, rep=671767
+    warps: [0]
+    cycles: [671767]
+  group 5: size=1, rep=671895
+    warps: [3]
+    cycles: [671895]
+  group 6: size=1, rep=671897
+    warps: [2]
+    cycles: [671897]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 59
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 5
+  bic:
+    k=1: 180.7018
+    k=2: 68.5476
+    k=3: 39.8512
+    k=4: 8.7889
+    k=5: -161.6272
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=125120.5, accepted=True, total_error=2601.0000, max_error=1180.5000, sum_slices=22
+  merge_same_slice: enabled
+    merge slice=4: groups=[0, 1, 2], merged_rep=500592, warp_count=4, dup_warps=0
+    merge slice=5: groups=[3, 4], merged_rep=624423, warp_count=4, dup_warps=0
+  group 0: size=2, rep=500482
+    warps: [0, 2]
+    cycles: [500482, 500482]
+  group 1: size=1, rep=500592
+    warps: [1]
+    cycles: [500592]
+  group 2: size=1, rep=500614
+    warps: [3]
+    cycles: [500614]
+  group 3: size=1, rep=624422
+    warps: [4]
+    cycles: [624422]
+  group 4: size=3, rep=624424
+    warps: [5, 6, 7]
+    cycles: [624424, 624424, 624424]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 60
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 5
+  bic:
+    k=1: 181.8872
+    k=2: 27.1049
+    k=3: 16.7608
+    k=4: 8.7889
+    k=5: -161.6272
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=69688.71428571429, accepted=True, total_error=11942.8571, max_error=5963.4286, sum_slices=39
+  merge_same_slice: enabled
+    merge slice=7: groups=[0, 1, 2], merged_rep=487828, warp_count=4, dup_warps=0
+    merge slice=9: groups=[3, 4], merged_rep=621236, warp_count=4, dup_warps=0
+  group 0: size=1, rep=487821
+    warps: [5]
+    cycles: [487821]
+  group 1: size=1, rep=487828
+    warps: [4]
+    cycles: [487828]
+  group 2: size=2, rep=487832
+    warps: [6, 7]
+    cycles: [487832, 487832]
+  group 3: size=1, rep=621235
+    warps: [1]
+    cycles: [621235]
+  group 4: size=3, rep=621237
+    warps: [0, 2, 3]
+    cycles: [621237, 621237, 621237]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 61
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 185.9443
+    k=2: 18.8249
+    k=3: 13.8515
+    k=4: 12.8755
+    k=5: 9.7041
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=171325.83333333334, accepted=True, total_error=1177.3333, max_error=583.6667, sum_slices=20
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1, 2, 3], merged_rep=513975, warp_count=4, dup_warps=0
+    merge slice=4: groups=[4, 5], merged_rep=685886, warp_count=4, dup_warps=0
+  group 0: size=1, rep=513972
+    warps: [0]
+    cycles: [513972]
+  group 1: size=1, rep=513974
+    warps: [3]
+    cycles: [513974]
+  group 2: size=1, rep=513976
+    warps: [1]
+    cycles: [513976]
+  group 3: size=1, rep=513979
+    warps: [2]
+    cycles: [513979]
+  group 4: size=1, rep=685885
+    warps: [7]
+    cycles: [685885]
+  group 5: size=3, rep=685887
+    warps: [4, 5, 6]
+    cycles: [685887, 685887, 685887]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 62
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 186.3784
+    k=2: 71.8237
+    k=3: 29.7429
+    k=4: 30.4087
+    k=5: 29.7483
+    k=6: 23.2922
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=170808.9583333333, accepted=True, total_error=23322.1667, max_error=3292.1667, sum_slices=28
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1, 2, 3], merged_rep=509884, warp_count=4, dup_warps=0
+    merge slice=4: groups=[4, 5, 6, 7], merged_rep=686524, warp_count=4, dup_warps=0
+  group 0: size=1, rep=509807
+    warps: [6]
+    cycles: [509807]
+  group 1: size=1, rep=509813
+    warps: [4]
+    cycles: [509813]
+  group 2: size=1, rep=509956
+    warps: [7]
+    cycles: [509956]
+  group 3: size=1, rep=509963
+    warps: [5]
+    cycles: [509963]
+  group 4: size=1, rep=686521
+    warps: [1]
+    cycles: [686521]
+  group 5: size=1, rep=686523
+    warps: [0]
+    cycles: [686523]
+  group 6: size=1, rep=686525
+    warps: [2]
+    cycles: [686525]
+  group 7: size=1, rep=686528
+    warps: [3]
+    cycles: [686528]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 63
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 186.3896
+    k=2: 23.5197
+    k=3: 23.8736
+    k=4: 20.5196
+    k=5: 21.2794
+    k=6: 19.4081
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=167165.4166666667, accepted=True, total_error=38390.3333, max_error=5487.3333, sum_slices=28
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1, 2, 3], merged_rep=497382, warp_count=4, dup_warps=0
+    merge slice=4: groups=[4, 5, 6, 7], merged_rep=674145, warp_count=4, dup_warps=0
+  group 0: size=1, rep=497379
+    warps: [3]
+    cycles: [497379]
+  group 1: size=1, rep=497381
+    warps: [2]
+    cycles: [497381]
+  group 2: size=1, rep=497383
+    warps: [0]
+    cycles: [497383]
+  group 3: size=1, rep=497386
+    warps: [1]
+    cycles: [497386]
+  group 4: size=1, rep=674142
+    warps: [6]
+    cycles: [674142]
+  group 5: size=1, rep=674144
+    warps: [5]
+    cycles: [674144]
+  group 6: size=1, rep=674146
+    warps: [7]
+    cycles: [674146]
+  group 7: size=1, rep=674149
+    warps: [4]
+    cycles: [674149]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 64
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 186.4399
+    k=2: 78.5598
+    k=3: 77.3081
+    k=4: 73.1010
+    k=5: 40.5477
+    k=6: 26.7384
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=169634.5, accepted=True, total_error=30742.0000, max_error=4416.0000, sum_slices=28
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1, 2, 3], merged_rep=505574, warp_count=4, dup_warps=0
+    merge slice=4: groups=[4, 5, 6, 7], merged_rep=682888, warp_count=4, dup_warps=0
+  group 0: size=1, rep=505429
+    warps: [6]
+    cycles: [505429]
+  group 1: size=1, rep=505568
+    warps: [5]
+    cycles: [505568]
+  group 2: size=1, rep=505581
+    warps: [7]
+    cycles: [505581]
+  group 3: size=1, rep=505692
+    warps: [4]
+    cycles: [505692]
+  group 4: size=1, rep=682820
+    warps: [2]
+    cycles: [682820]
+  group 5: size=1, rep=682824
+    warps: [1]
+    cycles: [682824]
+  group 6: size=1, rep=682952
+    warps: [0]
+    cycles: [682952]
+  group 7: size=1, rep=682954
+    warps: [3]
+    cycles: [682954]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 65
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 186.6248
+    k=2: 27.9430
+    k=3: 12.1361
+    k=4: 10.0221
+    k=5: -1.3863
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=61947.3125, accepted=True, total_error=12929.8750, max_error=6458.4375, sum_slices=54
+  merge_same_slice: enabled
+    merge slice=8: groups=[0, 1, 2, 3], merged_rep=495580, warp_count=4, dup_warps=0
+    merge slice=11: groups=[4, 5], merged_rep=674963, warp_count=4, dup_warps=0
+  group 0: size=1, rep=495578
+    warps: [6]
+    cycles: [495578]
+  group 1: size=1, rep=495579
+    warps: [7]
+    cycles: [495579]
+  group 2: size=1, rep=495581
+    warps: [4]
+    cycles: [495581]
+  group 3: size=1, rep=495590
+    warps: [5]
+    cycles: [495590]
+  group 4: size=1, rep=674962
+    warps: [0]
+    cycles: [674962]
+  group 5: size=3, rep=674964
+    warps: [1, 2, 3]
+    cycles: [674964, 674964, 674964]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 66
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 186.5765
+    k=2: 82.8529
+    k=3: 73.8489
+    k=4: 18.4207
+    k=5: 9.7041
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=44912.6, accepted=True, total_error=1752.8000, max_error=878.4000, sum_slices=82
+  merge_same_slice: enabled
+    merge slice=11: groups=[0, 1], merged_rep=494783, warp_count=4, dup_warps=0
+    merge slice=15: groups=[2, 3, 4, 5], merged_rep=673624, warp_count=4, dup_warps=0
+  group 0: size=2, rep=494649
+    warps: [5, 7]
+    cycles: [494649, 494649]
+  group 1: size=2, rep=494917
+    warps: [4, 6]
+    cycles: [494917, 494917]
+  group 2: size=1, rep=673556
+    warps: [2]
+    cycles: [673556]
+  group 3: size=1, rep=673560
+    warps: [1]
+    cycles: [673560]
+  group 4: size=1, rep=673688
+    warps: [0]
+    cycles: [673688]
+  group 5: size=1, rep=673690
+    warps: [3]
+    cycles: [673690]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 67
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 185.8108
+    k=2: 82.8088
+    k=3: 76.0629
+    k=4: 68.8777
+    k=5: 58.5066
+    k=6: 26.7384
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=168785.375, accepted=True, total_error=6791.5000, max_error=995.5000, sum_slices=28
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1, 2, 3], merged_rep=505637, warp_count=4, dup_warps=0
+    merge slice=4: groups=[4, 5, 6, 7], merged_rep=676071, warp_count=4, dup_warps=0
+  group 0: size=1, rep=505365
+    warps: [0]
+    cycles: [505365]
+  group 1: size=1, rep=505606
+    warps: [2]
+    cycles: [505606]
+  group 2: size=1, rep=505668
+    warps: [3]
+    cycles: [505668]
+  group 3: size=1, rep=505710
+    warps: [1]
+    cycles: [505710]
+  group 4: size=1, rep=676003
+    warps: [5]
+    cycles: [676003]
+  group 5: size=1, rep=676007
+    warps: [4]
+    cycles: [676007]
+  group 6: size=1, rep=676135
+    warps: [7]
+    cycles: [676135]
+  group 7: size=1, rep=676137
+    warps: [6]
+    cycles: [676137]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 68
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 186.1065
+    k=2: 67.4920
+    k=3: 33.4024
+    k=4: 26.8691
+    k=5: 21.2794
+    k=6: 19.4081
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=168333.1666666667, accepted=True, total_error=21318.3333, max_error=2994.3333, sum_slices=28
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1, 2, 3], merged_rep=502630, warp_count=4, dup_warps=0
+    merge slice=4: groups=[4, 5, 6, 7], merged_rep=676323, warp_count=4, dup_warps=0
+  group 0: size=1, rep=502623
+    warps: [2]
+    cycles: [502623]
+  group 1: size=1, rep=502625
+    warps: [3]
+    cycles: [502625]
+  group 2: size=1, rep=502635
+    warps: [0]
+    cycles: [502635]
+  group 3: size=1, rep=502759
+    warps: [1]
+    cycles: [502759]
+  group 4: size=1, rep=676320
+    warps: [4]
+    cycles: [676320]
+  group 5: size=1, rep=676322
+    warps: [7]
+    cycles: [676322]
+  group 6: size=1, rep=676324
+    warps: [5]
+    cycles: [676324]
+  group 7: size=1, rep=676327
+    warps: [6]
+    cycles: [676327]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 69
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 186.1494
+    k=2: 81.1226
+    k=3: 69.3341
+    k=4: 12.8755
+    k=5: 9.7041
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=45164.181818181816, accepted=True, total_error=13361.4545, max_error=6436.7273, sum_slices=74
+  merge_same_slice: enabled
+    merge slice=11: groups=[0, 1, 2, 3], merged_rep=496867, warp_count=4, dup_warps=0
+    merge slice=15: groups=[4, 5], merged_rep=671027, warp_count=4, dup_warps=0
+  group 0: size=1, rep=496746
+    warps: [0]
+    cycles: [496746]
+  group 1: size=1, rep=496866
+    warps: [2]
+    cycles: [496866]
+  group 2: size=1, rep=496868
+    warps: [3]
+    cycles: [496868]
+  group 3: size=1, rep=497114
+    warps: [1]
+    cycles: [497114]
+  group 4: size=1, rep=671026
+    warps: [4]
+    cycles: [671026]
+  group 5: size=3, rep=671028
+    warps: [5, 6, 7]
+    cycles: [671028, 671028, 671028]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 70
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 186.2722
+    k=2: 74.4958
+    k=3: 69.2264
+    k=4: 28.4428
+    k=5: 12.9478
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=45523.63636363637, accepted=True, total_error=13493.0909, max_error=6560.5455, sum_slices=74
+  merge_same_slice: enabled
+    merge slice=11: groups=[0, 1, 2, 3], merged_rep=500822, warp_count=4, dup_warps=0
+    merge slice=15: groups=[4, 5], merged_rep=676295, warp_count=4, dup_warps=0
+  group 0: size=1, rep=500702
+    warps: [2]
+    cycles: [500702]
+  group 1: size=1, rep=500818
+    warps: [3]
+    cycles: [500818]
+  group 2: size=1, rep=500826
+    warps: [1]
+    cycles: [500826]
+  group 3: size=1, rep=500952
+    warps: [0]
+    cycles: [500952]
+  group 4: size=1, rep=676294
+    warps: [4]
+    cycles: [676294]
+  group 5: size=3, rep=676296
+    warps: [5, 6, 7]
+    cycles: [676296, 676296, 676296]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 71
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 186.4421
+    k=2: 69.7072
+    k=3: 26.5996
+    k=4: 18.4207
+    k=5: 9.7041
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=45219.26666666666, accepted=True, total_error=7201.1333, max_error=3472.0667, sum_slices=82
+  merge_same_slice: enabled
+    merge slice=11: groups=[0, 1], merged_rep=500880, warp_count=4, dup_warps=0
+    merge slice=15: groups=[2, 3, 4, 5], merged_rep=678224, warp_count=4, dup_warps=0
+  group 0: size=3, rep=500877
+    warps: [4, 5, 6]
+    cycles: [500877, 500877, 500877]
+  group 1: size=1, rep=500884
+    warps: [7]
+    cycles: [500884]
+  group 2: size=1, rep=678156
+    warps: [2]
+    cycles: [678156]
+  group 3: size=1, rep=678160
+    warps: [1]
+    cycles: [678160]
+  group 4: size=1, rep=678288
+    warps: [0]
+    cycles: [678288]
+  group 5: size=1, rep=678290
+    warps: [3]
+    cycles: [678290]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 72
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 181.7121
+    k=2: 69.6914
+    k=3: 16.3607
+    k=4: 12.8755
+    k=5: 9.7041
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=44724.90909090909, accepted=True, total_error=4573.4545, max_error=2154.7273, sum_slices=72
+  merge_same_slice: enabled
+    merge slice=11: groups=[0, 1, 2, 3], merged_rep=492040, warp_count=4, dup_warps=0
+    merge slice=14: groups=[4, 5], merged_rep=623995, warp_count=4, dup_warps=0
+  group 0: size=1, rep=491972
+    warps: [2]
+    cycles: [491972]
+  group 1: size=1, rep=491976
+    warps: [1]
+    cycles: [491976]
+  group 2: size=1, rep=492104
+    warps: [0]
+    cycles: [492104]
+  group 3: size=1, rep=492106
+    warps: [3]
+    cycles: [492106]
+  group 4: size=1, rep=623994
+    warps: [4]
+    cycles: [623994]
+  group 5: size=3, rep=623996
+    warps: [5, 6, 7]
+    cycles: [623996, 623996, 623996]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 73
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 185.9677
+    k=2: 73.9187
+    k=3: 70.9624
+    k=4: 41.9199
+    k=5: 27.2819
+    k=6: 26.7384
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=168157.0416666667, accepted=True, total_error=16025.8333, max_error=2360.8333, sum_slices=28
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1, 2, 3], merged_rep=502785, warp_count=4, dup_warps=0
+    merge slice=4: groups=[4, 5, 6, 7], merged_rep=674923, warp_count=4, dup_warps=0
+  group 0: size=1, rep=502665
+    warps: [5]
+    cycles: [502665]
+  group 1: size=1, rep=502783
+    warps: [6]
+    cycles: [502783]
+  group 2: size=1, rep=502787
+    warps: [7]
+    cycles: [502787]
+  group 3: size=1, rep=502801
+    warps: [4]
+    cycles: [502801]
+  group 4: size=1, rep=674855
+    warps: [1]
+    cycles: [674855]
+  group 5: size=1, rep=674859
+    warps: [0]
+    cycles: [674859]
+  group 6: size=1, rep=674987
+    warps: [3]
+    cycles: [674987]
+  group 7: size=1, rep=674989
+    warps: [2]
+    cycles: [674989]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 74
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 186.7367
+    k=2: 69.2051
+    k=3: 23.5670
+    k=4: 16.1192
+    k=5: 12.9478
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=61952.0625, accepted=True, total_error=10568.3750, max_error=5154.6875, sum_slices=54
+  merge_same_slice: enabled
+    merge slice=8: groups=[0, 1, 2, 3], merged_rep=495681, warp_count=4, dup_warps=0
+    merge slice=11: groups=[4, 5], merged_rep=676319, warp_count=4, dup_warps=0
+  group 0: size=1, rep=495613
+    warps: [2]
+    cycles: [495613]
+  group 1: size=1, rep=495620
+    warps: [3]
+    cycles: [495620]
+  group 2: size=1, rep=495742
+    warps: [0]
+    cycles: [495742]
+  group 3: size=1, rep=495745
+    warps: [1]
+    cycles: [495745]
+  group 4: size=1, rep=676318
+    warps: [4]
+    cycles: [676318]
+  group 5: size=3, rep=676320
+    warps: [5, 6, 7]
+    cycles: [676320, 676320, 676320]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 75
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 180.4344
+    k=2: 82.1343
+    k=3: 75.8524
+    k=4: 67.3222
+    k=5: 12.9478
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=125142.5, accepted=True, total_error=7024.0000, max_error=3194.5000, sum_slices=26
+  merge_same_slice: enabled
+    merge slice=4: groups=[0, 1, 2, 3], merged_rep=500692, warp_count=4, dup_warps=0
+    merge slice=5: groups=[4, 5], merged_rep=622519, warp_count=4, dup_warps=0
+  group 0: size=1, rep=500495
+    warps: [0]
+    cycles: [500495]
+  group 1: size=1, rep=500645
+    warps: [1]
+    cycles: [500645]
+  group 2: size=1, rep=500740
+    warps: [2]
+    cycles: [500740]
+  group 3: size=1, rep=500887
+    warps: [3]
+    cycles: [500887]
+  group 4: size=1, rep=622518
+    warps: [4]
+    cycles: [622518]
+  group 5: size=3, rep=622520
+    warps: [5, 6, 7]
+    cycles: [622520, 622520, 622520]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 76
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 7
+  bic:
+    k=1: 186.5308
+    k=2: 75.8786
+    k=3: 73.8603
+    k=4: 28.3277
+    k=5: 22.5796
+    k=6: 13.8629
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=60834.27272727273, accepted=True, total_error=12656.4545, max_error=4180.8182, sum_slices=68
+  merge_same_slice: enabled
+    merge slice=8: groups=[0, 1, 2], merged_rep=490848, warp_count=4, dup_warps=0
+    merge slice=11: groups=[3, 4, 5, 6], merged_rep=669111, warp_count=4, dup_warps=0
+  group 0: size=2, rep=490710
+    warps: [2, 3]
+    cycles: [490710, 490710]
+  group 1: size=1, rep=490848
+    warps: [1]
+    cycles: [490848]
+  group 2: size=1, rep=490855
+    warps: [0]
+    cycles: [490855]
+  group 3: size=1, rep=669043
+    warps: [5]
+    cycles: [669043]
+  group 4: size=1, rep=669047
+    warps: [4]
+    cycles: [669047]
+  group 5: size=1, rep=669175
+    warps: [7]
+    cycles: [669175]
+  group 6: size=1, rep=669177
+    warps: [6]
+    cycles: [669177]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 77
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 186.6533
+    k=2: 41.5064
+    k=3: 33.2050
+    k=4: 28.3854
+    k=5: 25.5521
+    k=6: 23.2922
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=61528.69318181818, accepted=True, total_error=19539.3182, max_error=2823.6250, sum_slices=76
+  merge_same_slice: enabled
+    merge slice=8: groups=[0, 1, 2, 3], merged_rep=494296, warp_count=4, dup_warps=0
+    merge slice=11: groups=[4, 5, 6, 7], merged_rep=673995, warp_count=4, dup_warps=0
+  group 0: size=1, rep=494278
+    warps: [4]
+    cycles: [494278]
+  group 1: size=1, rep=494290
+    warps: [6]
+    cycles: [494290]
+  group 2: size=1, rep=494302
+    warps: [5]
+    cycles: [494302]
+  group 3: size=1, rep=494306
+    warps: [7]
+    cycles: [494306]
+  group 4: size=1, rep=673992
+    warps: [0]
+    cycles: [673992]
+  group 5: size=1, rep=673994
+    warps: [3]
+    cycles: [673994]
+  group 6: size=1, rep=673996
+    warps: [1]
+    cycles: [673996]
+  group 7: size=1, rep=673999
+    warps: [2]
+    cycles: [673999]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 78
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 186.4600
+    k=2: 23.5197
+    k=3: 23.8736
+    k=4: 20.5196
+    k=5: 21.2794
+    k=6: 19.4081
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=167736.875, accepted=True, total_error=39224.5000, max_error=5606.5000, sum_slices=28
+  merge_same_slice: enabled
+    merge slice=3: groups=[0, 1, 2, 3], merged_rep=499007, warp_count=4, dup_warps=0
+    merge slice=4: groups=[4, 5, 6, 7], merged_rep=676550, warp_count=4, dup_warps=0
+  group 0: size=1, rep=499004
+    warps: [4]
+    cycles: [499004]
+  group 1: size=1, rep=499006
+    warps: [7]
+    cycles: [499006]
+  group 2: size=1, rep=499008
+    warps: [5]
+    cycles: [499008]
+  group 3: size=1, rep=499011
+    warps: [6]
+    cycles: [499011]
+  group 4: size=1, rep=676547
+    warps: [3]
+    cycles: [676547]
+  group 5: size=1, rep=676549
+    warps: [2]
+    cycles: [676549]
+  group 6: size=1, rep=676551
+    warps: [0]
+    cycles: [676551]
+  group 7: size=1, rep=676554
+    warps: [1]
+    cycles: [676554]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 79
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 7
+  bic:
+    k=1: 186.2436
+    k=2: 78.6858
+    k=3: 76.7365
+    k=4: 74.9378
+    k=5: 39.4774
+    k=6: 13.8629
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=35636.78947368421, accepted=True, total_error=9180.8421, max_error=3072.9474, sum_slices=118
+  merge_same_slice: enabled
+    merge slice=14: groups=[0, 1, 2], merged_rep=501838, warp_count=4, dup_warps=0
+    merge slice=19: groups=[3, 4, 5, 6], merged_rep=676970, warp_count=4, dup_warps=0
+  group 0: size=1, rep=501706
+    warps: [2]
+    cycles: [501706]
+  group 1: size=2, rep=501838
+    warps: [0, 1]
+    cycles: [501838, 501838]
+  group 2: size=1, rep=501988
+    warps: [3]
+    cycles: [501988]
+  group 3: size=1, rep=676963
+    warps: [6]
+    cycles: [676963]
+  group 4: size=1, rep=676965
+    warps: [7]
+    cycles: [676965]
+  group 5: size=1, rep=676975
+    warps: [4]
+    cycles: [676975]
+  group 6: size=1, rep=677099
+    warps: [5]
+    cycles: [677099]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 80
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 105.8345
+    k=2: 81.3591
+    k=3: 75.2571
+    k=4: 66.1473
+    k=5: 30.4512
+    k=6: 23.2922
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=508828.0, accepted=True, total_error=4537.0000, max_error=846.0000, sum_slices=8
+  merge_same_slice: enabled
+    merge slice=1: groups=[0, 1, 2, 3, 4, 5, 6, 7], merged_rep=508828, warp_count=8, dup_warps=0
+  group 0: size=1, rep=507982
+    warps: [7]
+    cycles: [507982]
+  group 1: size=1, rep=508125
+    warps: [6]
+    cycles: [508125]
+  group 2: size=1, rep=508213
+    warps: [4]
+    cycles: [508213]
+  group 3: size=1, rep=508356
+    warps: [5]
+    cycles: [508356]
+  group 4: size=1, rep=509300
+    warps: [0]
+    cycles: [509300]
+  group 5: size=1, rep=509302
+    warps: [3]
+    cycles: [509302]
+  group 6: size=1, rep=509304
+    warps: [1]
+    cycles: [509304]
+  group 7: size=1, rep=509307
+    warps: [2]
+    cycles: [509307]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 81
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 110.3166
+    k=2: 84.0591
+    k=3: 77.5162
+    k=4: 75.8084
+    k=5: 41.5540
+    k=6: 34.5349
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=493474.0, accepted=True, total_error=6021.0000, max_error=1039.0000, sum_slices=8
+  merge_same_slice: enabled
+    merge slice=1: groups=[0, 1, 2, 3, 4, 5, 6, 7], merged_rep=493474, warp_count=8, dup_warps=0
+  group 0: size=1, rep=492435
+    warps: [3]
+    cycles: [492435]
+  group 1: size=1, rep=492657
+    warps: [1]
+    cycles: [492657]
+  group 2: size=1, rep=492799
+    warps: [2]
+    cycles: [492799]
+  group 3: size=1, rep=492806
+    warps: [0]
+    cycles: [492806]
+  group 4: size=1, rep=494142
+    warps: [5]
+    cycles: [494142]
+  group 5: size=1, rep=494144
+    warps: [6]
+    cycles: [494144]
+  group 6: size=1, rep=494154
+    warps: [7]
+    cycles: [494154]
+  group 7: size=1, rep=494278
+    warps: [4]
+    cycles: [494278]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 82
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 125.6171
+    k=2: 81.2928
+    k=3: 75.5514
+    k=4: 72.1985
+    k=5: 42.0951
+    k=6: 36.5287
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=502459.5, accepted=True, total_error=15826.0000, max_error=2196.5000, sum_slices=8
+  merge_same_slice: enabled
+    merge slice=1: groups=[0, 1, 2, 3, 4, 5, 6, 7], merged_rep=502460, warp_count=8, dup_warps=0
+  group 0: size=1, rep=500263
+    warps: [6]
+    cycles: [500263]
+  group 1: size=1, rep=500391
+    warps: [5]
+    cycles: [500391]
+  group 2: size=1, rep=500551
+    warps: [4]
+    cycles: [500551]
+  group 3: size=1, rep=500559
+    warps: [7]
+    cycles: [500559]
+  group 4: size=1, rep=504360
+    warps: [3]
+    cycles: [504360]
+  group 5: size=1, rep=504362
+    warps: [0]
+    cycles: [504362]
+  group 6: size=1, rep=504372
+    warps: [1]
+    cycles: [504372]
+  group 7: size=1, rep=504496
+    warps: [2]
+    cycles: [504496]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 83
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 7
+  bic:
+    k=1: 99.1813
+    k=2: 82.9536
+    k=3: 82.8221
+    k=4: 77.4633
+    k=5: 74.9063
+    k=6: 47.1340
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=499982.0, accepted=True, total_error=2258.0000, max_error=657.0000, sum_slices=7
+  merge_same_slice: enabled
+    merge slice=1: groups=[0, 1, 2, 3, 4, 5, 6], merged_rep=499982, warp_count=8, dup_warps=0
+  group 0: size=1, rep=499717
+    warps: [5]
+    cycles: [499717]
+  group 1: size=1, rep=499733
+    warps: [4]
+    cycles: [499733]
+  group 2: size=1, rep=499826
+    warps: [6]
+    cycles: [499826]
+  group 3: size=1, rep=499982
+    warps: [7]
+    cycles: [499982]
+  group 4: size=1, rep=500380
+    warps: [0]
+    cycles: [500380]
+  group 5: size=1, rep=500515
+    warps: [1]
+    cycles: [500515]
+  group 6: size=2, rep=500639
+    warps: [2, 3]
+    cycles: [500639, 500639]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 84
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 145.9202
+    k=2: 83.0795
+    k=3: 26.3387
+    k=4: 25.7510
+    k=5: 19.7262
+    k=6: 15.6481
+    k=7: 6.9315
+    k=8: -149.1506
+  slice_info: base=22306.779220779223, accepted=True, total_error=32873.1169, max_error=4243.6364, sum_slices=172
+  merge_same_slice: enabled
+    merge slice=21: groups=[0, 1, 2, 3], merged_rep=472530, warp_count=4, dup_warps=0
+    merge slice=22: groups=[4, 5, 6, 7], merged_rep=486620, warp_count=4, dup_warps=0
+  group 0: size=1, rep=472380
+    warps: [5]
+    cycles: [472380]
+  group 1: size=1, rep=472381
+    warps: [7]
+    cycles: [472381]
+  group 2: size=1, rep=472680
+    warps: [4]
+    cycles: [472680]
+  group 3: size=1, rep=472686
+    warps: [6]
+    cycles: [472686]
+  group 4: size=1, rep=486617
+    warps: [1]
+    cycles: [486617]
+  group 5: size=1, rep=486619
+    warps: [0]
+    cycles: [486619]
+  group 6: size=1, rep=486621
+    warps: [2]
+    cycles: [486621]
+  group 7: size=1, rep=486624
+    warps: [3]
+    cycles: [486624]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 85
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 130.0457
+    k=2: 82.4418
+    k=3: 44.4760
+    k=4: 30.4087
+    k=5: 29.7483
+    k=6: 23.2922
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=494953.0, accepted=True, total_error=20881.0000, max_error=2836.0000, sum_slices=8
+  merge_same_slice: enabled
+    merge slice=1: groups=[0, 1, 2, 3, 4, 5, 6, 7], merged_rep=494953, warp_count=8, dup_warps=0
+  group 0: size=1, rep=492117
+    warps: [7]
+    cycles: [492117]
+  group 1: size=1, rep=492123
+    warps: [6]
+    cycles: [492123]
+  group 2: size=1, rep=492396
+    warps: [5]
+    cycles: [492396]
+  group 3: size=1, rep=492424
+    warps: [4]
+    cycles: [492424]
+  group 4: size=1, rep=497482
+    warps: [2]
+    cycles: [497482]
+  group 5: size=1, rep=497484
+    warps: [1]
+    cycles: [497484]
+  group 6: size=1, rep=497486
+    warps: [3]
+    cycles: [497486]
+  group 7: size=1, rep=497489
+    warps: [0]
+    cycles: [497489]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 86
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 151.6471
+    k=2: 82.0630
+    k=3: 71.1310
+    k=4: 34.5399
+    k=5: 12.9478
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=24097.275, accepted=True, total_error=8220.5500, max_error=3844.7750, sum_slices=122
+  merge_same_slice: enabled
+    merge slice=20: groups=[0, 1, 2, 3], merged_rep=482016, warp_count=4, dup_warps=0
+    merge slice=21: groups=[4, 5], merged_rep=502199, warp_count=4, dup_warps=0
+  group 0: size=1, rep=481881
+    warps: [7]
+    cycles: [481881]
+  group 1: size=1, rep=482010
+    warps: [4]
+    cycles: [482010]
+  group 2: size=1, rep=482022
+    warps: [6]
+    cycles: [482022]
+  group 3: size=1, rep=482273
+    warps: [5]
+    cycles: [482273]
+  group 4: size=1, rep=502198
+    warps: [0]
+    cycles: [502198]
+  group 5: size=3, rep=502200
+    warps: [1, 2, 3]
+    cycles: [502200, 502200, 502200]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 87
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 5
+  bic:
+    k=1: 149.0825
+    k=2: 73.7378
+    k=3: 44.2295
+    k=4: 8.7889
+    k=5: -161.6272
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=21330.045454545456, accepted=True, total_error=8491.0909, max_error=4079.0455, sum_slices=112
+  merge_same_slice: enabled
+    merge slice=22: groups=[0, 1, 2], merged_rep=469414, warp_count=4, dup_warps=0
+    merge slice=23: groups=[3, 4], merged_rep=486513, warp_count=4, dup_warps=0
+  group 0: size=2, rep=469261
+    warps: [6, 7]
+    cycles: [469261, 469261]
+  group 1: size=1, rep=469414
+    warps: [4]
+    cycles: [469414]
+  group 2: size=1, rep=469443
+    warps: [5]
+    cycles: [469443]
+  group 3: size=1, rep=486512
+    warps: [2]
+    cycles: [486512]
+  group 4: size=3, rep=486514
+    warps: [0, 1, 3]
+    cycles: [486514, 486514, 486514]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 88
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 148.7202
+    k=2: 78.8119
+    k=3: 47.4701
+    k=4: 28.4428
+    k=5: 12.9478
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=21607.772727272728, accepted=True, total_error=9821.5455, max_error=4751.7727, sum_slices=134
+  merge_same_slice: enabled
+    merge slice=22: groups=[0, 1, 2, 3], merged_rep=475388, warp_count=4, dup_warps=0
+    merge slice=23: groups=[4, 5], merged_rep=492228, warp_count=4, dup_warps=0
+  group 0: size=1, rep=475358
+    warps: [6]
+    cycles: [475358]
+  group 1: size=1, rep=475384
+    warps: [7]
+    cycles: [475384]
+  group 2: size=1, rep=475392
+    warps: [4]
+    cycles: [475392]
+  group 3: size=1, rep=475644
+    warps: [5]
+    cycles: [475644]
+  group 4: size=1, rep=492227
+    warps: [1]
+    cycles: [492227]
+  group 5: size=3, rep=492229
+    warps: [0, 2, 3]
+    cycles: [492229, 492229, 492229]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 89
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 146.3038
+    k=2: 77.4252
+    k=3: 49.9799
+    k=4: 12.8755
+    k=5: 9.7041
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=18815.34, accepted=True, total_error=9133.6800, max_error=4312.8400, sum_slices=152
+  merge_same_slice: enabled
+    merge slice=25: groups=[0, 1, 2, 3], merged_rep=470510, warp_count=4, dup_warps=0
+    merge slice=26: groups=[4, 5], merged_rep=484887, warp_count=4, dup_warps=0
+  group 0: size=1, rep=470274
+    warps: [6]
+    cycles: [470274]
+  group 1: size=1, rep=470493
+    warps: [4]
+    cycles: [470493]
+  group 2: size=1, rep=470528
+    warps: [5]
+    cycles: [470528]
+  group 3: size=1, rep=470530
+    warps: [7]
+    cycles: [470530]
+  group 4: size=1, rep=484886
+    warps: [0]
+    cycles: [484886]
+  group 5: size=3, rep=484888
+    warps: [1, 2, 3]
+    cycles: [484888, 484888, 484888]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 90
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 133.8444
+    k=2: 76.4904
+    k=3: 61.9612
+    k=4: 36.9210
+    k=5: 12.9478
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=11555.127906976744, accepted=True, total_error=10143.2558, max_error=4838.6279, sum_slices=260
+  merge_same_slice: enabled
+    merge slice=43: groups=[0, 1, 2, 3], merged_rep=496984, warp_count=4, dup_warps=0
+    merge slice=44: groups=[4, 5], merged_rep=503588, warp_count=4, dup_warps=0
+  group 0: size=1, rep=496827
+    warps: [5]
+    cycles: [496827]
+  group 1: size=1, rep=496914
+    warps: [6]
+    cycles: [496914]
+  group 2: size=1, rep=497054
+    warps: [4]
+    cycles: [497054]
+  group 3: size=1, rep=497068
+    warps: [7]
+    cycles: [497068]
+  group 4: size=1, rep=503587
+    warps: [1]
+    cycles: [503587]
+  group 5: size=3, rep=503589
+    warps: [0, 2, 3]
+    cycles: [503589, 503589, 503589]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 91
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 145.4296
+    k=2: 70.7357
+    k=3: 39.9405
+    k=4: 26.4404
+    k=5: 19.7262
+    k=6: 15.6481
+    k=7: 6.9315
+    k=8: -149.1506
+  slice_info: base=22934.78787878788, accepted=True, total_error=37082.1515, max_error=4712.3333, sum_slices=172
+  merge_same_slice: enabled
+    merge slice=21: groups=[0, 1, 2, 3], merged_rep=486187, warp_count=4, dup_warps=0
+    merge slice=22: groups=[4, 5, 6, 7], merged_rep=499856, warp_count=4, dup_warps=0
+  group 0: size=1, rep=486122
+    warps: [4]
+    cycles: [486122]
+  group 1: size=1, rep=486123
+    warps: [6]
+    cycles: [486123]
+  group 2: size=1, rep=486251
+    warps: [5]
+    cycles: [486251]
+  group 3: size=1, rep=486272
+    warps: [7]
+    cycles: [486272]
+  group 4: size=1, rep=499853
+    warps: [1]
+    cycles: [499853]
+  group 5: size=1, rep=499855
+    warps: [0]
+    cycles: [499855]
+  group 6: size=1, rep=499857
+    warps: [2]
+    cycles: [499857]
+  group 7: size=1, rep=499860
+    warps: [3]
+    cycles: [499860]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 92
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 147.7894
+    k=2: 81.3521
+    k=3: 28.4952
+    k=4: 28.3854
+    k=5: 25.5521
+    k=6: 23.2922
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=24439.30657894737, accepted=True, total_error=34417.2263, max_error=4399.1750, sum_slices=156
+  merge_same_slice: enabled
+    merge slice=19: groups=[0, 1, 2, 3], merged_rep=468609, warp_count=4, dup_warps=0
+    merge slice=20: groups=[4, 5, 6, 7], merged_rep=484443, warp_count=4, dup_warps=0
+  group 0: size=1, rep=468469
+    warps: [6]
+    cycles: [468469]
+  group 1: size=1, rep=468476
+    warps: [7]
+    cycles: [468476]
+  group 2: size=1, rep=468742
+    warps: [5]
+    cycles: [468742]
+  group 3: size=1, rep=468746
+    warps: [4]
+    cycles: [468746]
+  group 4: size=1, rep=484440
+    warps: [0]
+    cycles: [484440]
+  group 5: size=1, rep=484442
+    warps: [3]
+    cycles: [484442]
+  group 6: size=1, rep=484444
+    warps: [1]
+    cycles: [484444]
+  group 7: size=1, rep=484447
+    warps: [2]
+    cycles: [484447]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 93
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 144.3901
+    k=2: 83.3381
+    k=3: 77.6854
+    k=4: 66.8091
+    k=5: 12.9478
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=17871.370370370372, accepted=True, total_error=10565.7407, max_error=4940.3704, sum_slices=164
+  merge_same_slice: enabled
+    merge slice=27: groups=[0, 1, 2, 3], merged_rep=482658, warp_count=4, dup_warps=0
+    merge slice=28: groups=[4, 5], merged_rep=495459, warp_count=4, dup_warps=0
+  group 0: size=1, rep=482442
+    warps: [5]
+    cycles: [482442]
+  group 1: size=1, rep=482612
+    warps: [7]
+    cycles: [482612]
+  group 2: size=1, rep=482704
+    warps: [4]
+    cycles: [482704]
+  group 3: size=1, rep=482867
+    warps: [6]
+    cycles: [482867]
+  group 4: size=1, rep=495458
+    warps: [0]
+    cycles: [495458]
+  group 5: size=3, rep=495460
+    warps: [1, 2, 3]
+    cycles: [495460, 495460, 495460]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 94
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 140.6564
+    k=2: 78.4411
+    k=3: 64.0499
+    k=4: 30.4087
+    k=5: 29.7483
+    k=6: 23.2922
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=18744.303846153845, accepted=True, total_error=34422.2154, max_error=4430.4038, sum_slices=204
+  merge_same_slice: enabled
+    merge slice=25: groups=[0, 1, 2, 3], merged_rep=472857, warp_count=4, dup_warps=0
+    merge slice=26: groups=[4, 5, 6, 7], merged_rep=483019, warp_count=4, dup_warps=0
+  group 0: size=1, rep=472770
+    warps: [7]
+    cycles: [472770]
+  group 1: size=1, rep=472776
+    warps: [6]
+    cycles: [472776]
+  group 2: size=1, rep=472938
+    warps: [4]
+    cycles: [472938]
+  group 3: size=1, rep=473038
+    warps: [5]
+    cycles: [473038]
+  group 4: size=1, rep=483016
+    warps: [0]
+    cycles: [483016]
+  group 5: size=1, rep=483018
+    warps: [3]
+    cycles: [483018]
+  group 6: size=1, rep=483020
+    warps: [1]
+    cycles: [483020]
+  group 7: size=1, rep=483023
+    warps: [2]
+    cycles: [483023]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 95
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 144.0706
+    k=2: 75.2890
+    k=3: 73.9003
+    k=4: 38.3332
+    k=5: 29.0670
+    k=6: 26.7384
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=21585.995059288536, accepted=True, total_error=36138.9802, max_error=4682.8864, sum_slices=180
+  merge_same_slice: enabled
+    merge slice=22: groups=[0, 1, 2, 3], merged_rep=479309, warp_count=4, dup_warps=0
+    merge slice=23: groups=[4, 5, 6, 7], merged_rep=491863, warp_count=4, dup_warps=0
+  group 0: size=1, rep=479243
+    warps: [7]
+    cycles: [479243]
+  group 1: size=1, rep=479248
+    warps: [6]
+    cycles: [479248]
+  group 2: size=1, rep=479370
+    warps: [5]
+    cycles: [479370]
+  group 3: size=1, rep=479384
+    warps: [4]
+    cycles: [479384]
+  group 4: size=1, rep=491795
+    warps: [1]
+    cycles: [491795]
+  group 5: size=1, rep=491799
+    warps: [0]
+    cycles: [491799]
+  group 6: size=1, rep=491927
+    warps: [3]
+    cycles: [491927]
+  group 7: size=1, rep=491929
+    warps: [2]
+    cycles: [491929]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 96
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 146.7513
+    k=2: 78.3018
+    k=3: 66.8791
+    k=4: 51.8281
+    k=5: 12.9478
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=19480.58, accepted=True, total_error=9641.1600, max_error=4556.0800, sum_slices=152
+  merge_same_slice: enabled
+    merge slice=25: groups=[0, 1, 2, 3], merged_rep=487127, warp_count=4, dup_warps=0
+    merge slice=26: groups=[4, 5], merged_rep=501940, warp_count=4, dup_warps=0
+  group 0: size=1, rep=486920
+    warps: [7]
+    cycles: [486920]
+  group 1: size=1, rep=487109
+    warps: [4]
+    cycles: [487109]
+  group 2: size=1, rep=487145
+    warps: [5]
+    cycles: [487145]
+  group 3: size=1, rep=487226
+    warps: [6]
+    cycles: [487226]
+  group 4: size=1, rep=501939
+    warps: [1]
+    cycles: [501939]
+  group 5: size=3, rep=501941
+    warps: [0, 2, 3]
+    cycles: [501941, 501941, 501941]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 97
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 143.6960
+    k=2: 66.5238
+    k=3: 22.1334
+    k=4: 14.9744
+    k=5: 9.7041
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=16753.08620689655, accepted=True, total_error=8929.1724, max_error=4520.5862, sum_slices=172
+  merge_same_slice: enabled
+    merge slice=28: groups=[0, 1], merged_rep=473545, warp_count=4, dup_warps=0
+    merge slice=29: groups=[2, 3, 4, 5], merged_rep=485837, warp_count=4, dup_warps=0
+  group 0: size=1, rep=473483
+    warps: [7]
+    cycles: [473483]
+  group 1: size=3, rep=473607
+    warps: [4, 5, 6]
+    cycles: [473607, 473607, 473607]
+  group 2: size=1, rep=485834
+    warps: [2]
+    cycles: [485834]
+  group 3: size=1, rep=485836
+    warps: [1]
+    cycles: [485836]
+  group 4: size=1, rep=485838
+    warps: [3]
+    cycles: [485838]
+  group 5: size=1, rep=485841
+    warps: [0]
+    cycles: [485841]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 98
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 148.4841
+    k=2: 83.5597
+    k=3: 77.6222
+    k=4: 76.7007
+    k=5: 73.9300
+    k=6: 43.6363
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=24394.43289473684, accepted=True, total_error=31427.7316, max_error=4067.7750, sum_slices=156
+  merge_same_slice: enabled
+    merge slice=19: groups=[0, 1, 2, 3], merged_rep=467380, warp_count=4, dup_warps=0
+    merge slice=20: groups=[4, 5, 6, 7], merged_rep=483882, warp_count=4, dup_warps=0
+  group 0: size=1, rep=467178
+    warps: [6]
+    cycles: [467178]
+  group 1: size=1, rep=467308
+    warps: [7]
+    cycles: [467308]
+  group 2: size=1, rep=467452
+    warps: [4]
+    cycles: [467452]
+  group 3: size=1, rep=467562
+    warps: [5]
+    cycles: [467562]
+  group 4: size=1, rep=483875
+    warps: [2]
+    cycles: [483875]
+  group 5: size=1, rep=483877
+    warps: [3]
+    cycles: [483877]
+  group 6: size=1, rep=483887
+    warps: [0]
+    cycles: [483887]
+  group 7: size=1, rep=484011
+    warps: [1]
+    cycles: [484011]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 99
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 153.1271
+    k=2: 82.4538
+    k=3: 77.8233
+    k=4: 74.4878
+    k=5: 35.5347
+    k=6: 26.7384
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=31113.497916666667, accepted=True, total_error=36028.9917, max_error=4668.9667, sum_slices=124
+  merge_same_slice: enabled
+    merge slice=15: groups=[0, 1, 2, 3], merged_rep=471082, warp_count=4, dup_warps=0
+    merge slice=16: groups=[4, 5, 6, 7], merged_rep=493215, warp_count=4, dup_warps=0
+  group 0: size=1, rep=470954
+    warps: [7]
+    cycles: [470954]
+  group 1: size=1, rep=471078
+    warps: [4]
+    cycles: [471078]
+  group 2: size=1, rep=471087
+    warps: [6]
+    cycles: [471087]
+  group 3: size=1, rep=471314
+    warps: [5]
+    cycles: [471314]
+  group 4: size=1, rep=493147
+    warps: [1]
+    cycles: [493147]
+  group 5: size=1, rep=493151
+    warps: [0]
+    cycles: [493151]
+  group 6: size=1, rep=493279
+    warps: [3]
+    cycles: [493279]
+  group 7: size=1, rep=493281
+    warps: [2]
+    cycles: [493281]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 100
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 152.8333
+    k=2: 80.4126
+    k=3: 77.8051
+    k=4: 74.4412
+    k=5: 70.0893
+    k=6: 26.7384
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=30564.908333333333, accepted=True, total_error=35442.6333, max_error=4600.5333, sum_slices=124
+  merge_same_slice: enabled
+    merge slice=15: groups=[0, 1, 2, 3], merged_rep=462793, warp_count=4, dup_warps=0
+    merge slice=16: groups=[4, 5, 6, 7], merged_rep=484506, warp_count=4, dup_warps=0
+  group 0: size=1, rep=462661
+    warps: [4]
+    cycles: [462661]
+  group 1: size=1, rep=462748
+    warps: [5]
+    cycles: [462748]
+  group 2: size=1, rep=462838
+    warps: [7]
+    cycles: [462838]
+  group 3: size=1, rep=462958
+    warps: [6]
+    cycles: [462958]
+  group 4: size=1, rep=484438
+    warps: [0]
+    cycles: [484438]
+  group 5: size=1, rep=484442
+    warps: [3]
+    cycles: [484442]
+  group 6: size=1, rep=484570
+    warps: [2]
+    cycles: [484570]
+  group 7: size=1, rep=484572
+    warps: [1]
+    cycles: [484572]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 101
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 7
+  bic:
+    k=1: 147.1483
+    k=2: 76.8440
+    k=3: 68.1189
+    k=4: 26.2923
+    k=5: 19.1333
+    k=6: 13.8629
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=19598.30769230769, accepted=True, total_error=13067.9231, max_error=4471.3077, sum_slices=179
+  merge_same_slice: enabled
+    merge slice=25: groups=[0, 1, 2], merged_rep=494317, warp_count=4, dup_warps=0
+    merge slice=26: groups=[3, 4, 5, 6], merged_rep=509552, warp_count=4, dup_warps=0
+  group 0: size=1, rep=494180
+    warps: [5]
+    cycles: [494180]
+  group 1: size=1, rep=494317
+    warps: [7]
+    cycles: [494317]
+  group 2: size=2, rep=494429
+    warps: [4, 6]
+    cycles: [494429, 494429]
+  group 3: size=1, rep=509549
+    warps: [1]
+    cycles: [509549]
+  group 4: size=1, rep=509551
+    warps: [0]
+    cycles: [509551]
+  group 5: size=1, rep=509553
+    warps: [2]
+    cycles: [509553]
+  group 6: size=1, rep=509556
+    warps: [3]
+    cycles: [509556]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 102
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 136.8009
+    k=2: 74.1852
+    k=3: 68.8577
+    k=4: 34.5399
+    k=5: 12.9478
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=13037.141025641027, accepted=True, total_error=10379.2821, max_error=5006.6410, sum_slices=236
+  merge_same_slice: enabled
+    merge slice=39: groups=[0, 1, 2, 3], merged_rep=508510, warp_count=4, dup_warps=0
+    merge slice=40: groups=[4, 5], merged_rep=516480, warp_count=4, dup_warps=0
+  group 0: size=1, rep=508393
+    warps: [6]
+    cycles: [508393]
+  group 1: size=1, rep=508504
+    warps: [4]
+    cycles: [508504]
+  group 2: size=1, rep=508516
+    warps: [7]
+    cycles: [508516]
+  group 3: size=1, rep=508638
+    warps: [5]
+    cycles: [508638]
+  group 4: size=1, rep=516479
+    warps: [1]
+    cycles: [516479]
+  group 5: size=3, rep=516481
+    warps: [0, 2, 3]
+    cycles: [516481, 516481, 516481]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 103
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 8
+  bic:
+    k=1: 141.2164
+    k=2: 85.4537
+    k=3: 78.6989
+    k=4: 76.5568
+    k=5: 25.5521
+    k=6: 23.2922
+    k=7: 18.0218
+    k=8: -149.1506
+  slice_info: base=19563.822500000002, accepted=True, total_error=36262.2900, max_error=4679.2600, sum_slices=196
+  merge_same_slice: enabled
+    merge slice=24: groups=[0, 1, 2, 3], merged_rep=474136, warp_count=4, dup_warps=0
+    merge slice=25: groups=[4, 5, 6, 7], merged_rep=484572, warp_count=4, dup_warps=0
+  group 0: size=1, rep=473811
+    warps: [7]
+    cycles: [473811]
+  group 1: size=1, rep=474063
+    warps: [4]
+    cycles: [474063]
+  group 2: size=1, rep=474208
+    warps: [6]
+    cycles: [474208]
+  group 3: size=1, rep=474211
+    warps: [5]
+    cycles: [474211]
+  group 4: size=1, rep=484504
+    warps: [2]
+    cycles: [484504]
+  group 5: size=1, rep=484508
+    warps: [1]
+    cycles: [484508]
+  group 6: size=1, rep=484636
+    warps: [0]
+    cycles: [484636]
+  group 7: size=1, rep=484638
+    warps: [3]
+    cycles: [484638]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 104
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 143.9252
+    k=2: 79.4007
+    k=3: 64.8731
+    k=4: 41.6977
+    k=5: 12.9478
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=17107.571428571428, accepted=True, total_error=9674.1429, max_error=4557.5714, sum_slices=170
+  merge_same_slice: enabled
+    merge slice=28: groups=[0, 1, 2, 3], merged_rep=479148, warp_count=4, dup_warps=0
+    merge slice=29: groups=[4, 5], merged_rep=491563, warp_count=4, dup_warps=0
+  group 0: size=1, rep=478960
+    warps: [4]
+    cycles: [478960]
+  group 1: size=1, rep=479064
+    warps: [5]
+    cycles: [479064]
+  group 2: size=1, rep=479231
+    warps: [7]
+    cycles: [479231]
+  group 3: size=1, rep=479250
+    warps: [6]
+    cycles: [479250]
+  group 4: size=1, rep=491562
+    warps: [0]
+    cycles: [491562]
+  group 5: size=3, rep=491564
+    warps: [1, 2, 3]
+    cycles: [491564, 491564, 491564]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 105
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 140.6644
+    k=2: 82.3019
+    k=3: 72.4565
+    k=4: 70.3774
+    k=5: 12.9478
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=14832.671875, accepted=True, total_error=9757.3438, max_error=4560.1719, sum_slices=194
+  merge_same_slice: enabled
+    merge slice=32: groups=[0, 1, 2, 3], merged_rep=474774, warp_count=4, dup_warps=0
+    merge slice=33: groups=[4, 5], merged_rep=484919, warp_count=4, dup_warps=0
+  group 0: size=1, rep=474588
+    warps: [6]
+    cycles: [474588]
+  group 1: size=1, rep=474703
+    warps: [5]
+    cycles: [474703]
+  group 2: size=1, rep=474845
+    warps: [4]
+    cycles: [474845]
+  group 3: size=1, rep=474970
+    warps: [7]
+    cycles: [474970]
+  group 4: size=1, rep=484918
+    warps: [0]
+    cycles: [484918]
+  group 5: size=3, rep=484920
+    warps: [1, 2, 3]
+    cycles: [484920, 484920, 484920]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 106
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 136.9308
+    k=2: 78.5770
+    k=3: 73.3078
+    k=4: 61.0087
+    k=5: 12.9478
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=13006.5, accepted=True, total_error=10279.0000, max_error=4881.0000, sum_slices=224
+  merge_same_slice: enabled
+    merge slice=37: groups=[0, 1, 2, 3], merged_rep=481342, warp_count=4, dup_warps=0
+    merge slice=38: groups=[4, 5], merged_rep=489367, warp_count=4, dup_warps=0
+  group 0: size=1, rep=481171
+    warps: [6]
+    cycles: [481171]
+  group 1: size=1, rep=481310
+    warps: [5]
+    cycles: [481310]
+  group 2: size=1, rep=481374
+    warps: [4]
+    cycles: [481374]
+  group 3: size=1, rep=481487
+    warps: [7]
+    cycles: [481487]
+  group 4: size=1, rep=489366
+    warps: [0]
+    cycles: [489366]
+  group 5: size=3, rep=489368
+    warps: [1, 2, 3]
+    cycles: [489368, 489368, 489368]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+
+SM 107
+  max_warps: 64
+  normal_warps: 8
+  outliers: 56
+  chosen_k: 6
+  bic:
+    k=1: 143.7631
+    k=2: 37.2051
+    k=3: 17.8534
+    k=4: 12.8755
+    k=5: 9.7041
+    k=6: -157.4684
+    k=7: -153.3095
+    k=8: -149.1506
+  slice_info: base=16775.879310344826, accepted=True, total_error=8955.7586, max_error=4458.3793, sum_slices=176
+  merge_same_slice: enabled
+    merge slice=29: groups=[0, 1, 2, 3], merged_rep=486510, warp_count=4, dup_warps=0
+    merge slice=30: groups=[4, 5], merged_rep=498819, warp_count=4, dup_warps=0
+  group 0: size=1, rep=486492
+    warps: [6]
+    cycles: [486492]
+  group 1: size=1, rep=486509
+    warps: [7]
+    cycles: [486509]
+  group 2: size=1, rep=486511
+    warps: [5]
+    cycles: [486511]
+  group 3: size=1, rep=486514
+    warps: [4]
+    cycles: [486514]
+  group 4: size=1, rep=498818
+    warps: [0]
+    cycles: [498818]
+  group 5: size=3, rep=498820
+    warps: [1, 2, 3]
+    cycles: [498820, 498820, 498820]
+  outlier_groups:
+    [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8]
+

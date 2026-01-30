@@ -867,6 +867,11 @@ void memory_sub_partition::get_L2cache_sub_stats(
   }
 }
 
+unsigned memory_sub_partition::get_L2_data_port_width() const {
+  if (m_config->m_L2_config.disabled()) return 0;
+  return m_config->m_L2_config.m_data_port_width;
+}
+
 void memory_sub_partition::get_L2cache_sub_stats_pw(
     struct cache_sub_stats_pw &css) const {
   if (!m_config->m_L2_config.disabled()) {

@@ -70,6 +70,7 @@ xbar_router::xbar_router(unsigned router_id, enum Interconnect_type m_type,
   out_buffer_util = 0;
   in_buffer_util = 0;
   packets_num = 0;
+  last_forwarded_packets = 0;
   conflicts_util = 0;
   cycles_util = 0;
   reqs_util = 0;
@@ -123,15 +124,18 @@ void xbar_router::Advance() {
 }
 
 void xbar_router::Perfect_Advance() {
+  unsigned forwarded = 0;
   for (unsigned node_id = 0; node_id < total_nodes; node_id++) {
     if (!in_buffers[node_id].empty()) {
       Packet _packet = in_buffers[node_id].front();
       if (Has_Buffer_Out(_packet.output_deviceID, 1)) {
         out_buffers[_packet.output_deviceID].push(_packet);
         in_buffers[node_id].pop();
+        ++forwarded;
       }
     }
   }
+  last_forwarded_packets = forwarded;
 };
 
 void xbar_router::RR_Advance() {
@@ -183,6 +187,7 @@ void xbar_router::RR_Advance() {
     out_buffer_util += out_buffers[i].size();
   }
 
+  last_forwarded_packets = reqs;
   cycles++;
 }
 
@@ -284,6 +289,7 @@ void xbar_router::iSLIP_Advance() {
     out_buffer_util += out_buffers[i].size();
   }
 
+  last_forwarded_packets = reqs;
   cycles++;
 }
 
@@ -444,6 +450,13 @@ void LocalInterconnect::DisplayStats() const {
 void LocalInterconnect::DisplayOverallStats() const {}
 
 unsigned LocalInterconnect::GetFlitSize() const { return LOCAL_INCT_FLIT_SIZE; }
+
+unsigned LocalInterconnect::GetLastForwardedPackets(
+    enum Interconnect_type subnet) const {
+  unsigned subnet_id = static_cast<unsigned>(subnet);
+  if (subnet_id >= net.size()) return 0;
+  return net[subnet_id]->last_forwarded_packets;
+}
 
 void LocalInterconnect::DisplayState(FILE* fp) const {
   fprintf(fp, "GPGPU-Sim uArch: ICNT:Display State: Under implementation\n");
