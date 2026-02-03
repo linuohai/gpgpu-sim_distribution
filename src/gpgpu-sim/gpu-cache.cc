@@ -2021,13 +2021,34 @@ enum cache_request_status l1_cache::access(new_addr_type addr, mem_fetch *mf,
   bool handled_by_perfect_l1d = false;
 
   if (m_gpu && m_gpu->get_config().shader_config().gpgpu_perfect_l1d && mf) {
-    const bool is_target = (mf->get_access_type() == GLOBAL_ACC_R) &&
-                           !mf->isatomic() && !mf->get_is_write();
-    if (is_target) {
-      // Ideal L1D: force eligible global reads to HIT.
-      // This only affects the timing model (no lower-level request is issued).
+    const mem_access_type type = mf->get_access_type();
+    const bool eligible =
+        (type == GLOBAL_ACC_R || type == GLOBAL_ACC_W || type == LOCAL_ACC_R ||
+         type == LOCAL_ACC_W) &&
+        !mf->isatomic();
+    if (eligible) {
+      // Ideal L1D: force eligible global/local non-atomic accesses to HIT.
+      // For stores, preserve write-through traffic/ACK behavior by issuing a
+      // write request to the lower level when the configured write policy
+      // requires it.
       probe_status = HIT;
       status = HIT;
+      if (mf->get_is_write()) {
+        const write_policy_t wp = m_config.get_write_policy();
+        const bool need_lower_write =
+            (wp == WRITE_THROUGH) || (wp == WRITE_EVICT) ||
+            ((wp == LOCAL_WB_GLOBAL_WT) && (type == GLOBAL_ACC_W));
+        if (need_lower_write) {
+          if (miss_queue_full(0)) {
+            m_stats.inc_fail_stats(mf->get_access_type(), MISS_QUEUE_FULL,
+                                   mf->get_streamID());
+            status = RESERVATION_FAIL;
+          } else {
+            send_write_request(mf, cache_event(WRITE_REQUEST_SENT), time,
+                               events);
+          }
+        }
+      }
       m_bandwidth_management.use_data_port(mf, status, events);
       m_stats.inc_stats(
           mf->get_access_type(),
