@@ -23,6 +23,8 @@ class l1_tracer {
                    unsigned active_dp_lanes, unsigned total_dp_lanes,
                    unsigned active_sfu_lanes, unsigned total_sfu_lanes,
                    unsigned active_tensor_lanes, unsigned total_tensor_lanes);
+  static void emit_fill(unsigned sid, unsigned wid, const mem_fetch *mf,
+                        unsigned long long cycle, unsigned line_sz);
   static void flush_all();
 
  private:

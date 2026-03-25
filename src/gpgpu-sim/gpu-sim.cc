@@ -52,6 +52,7 @@
 #include "hbm_partition_tracer.h"
 #include "icnt_tracer.h"
 #include "icnt_wrapper.h"
+#include "grasp_tracer.h"
 #include "issue_tracer.h"
 #include "l1_tracer.h"
 #include "l2_bw_tracer.h"
@@ -404,6 +405,68 @@ void shader_core_config::reg_options(class OptionParser *opp) {
   option_parser_register(opp, "-gpgpu_perfect_l1d", OPT_BOOL,
                          &gpgpu_perfect_l1d,
                          "force eligible global reads to L1D HIT", "0");
+  option_parser_register(opp, "-gpgpu_ima_prefetch_enable", OPT_BOOL,
+                         &gpgpu_ima_prefetch_enable,
+                         "enable IMA stride prefetcher (index-array prefetch)",
+                         "0");
+  option_parser_register(opp, "-gpgpu_ima_prefetch_distance", OPT_INT32,
+                         &gpgpu_ima_prefetch_distance,
+                         "IMA prefetch lookahead depth (number of strides)", "4");
+  option_parser_register(opp, "-gpgpu_ima_prefetch_confidence", OPT_INT32,
+                         &gpgpu_ima_prefetch_confidence,
+                         "IMA prefetch confidence threshold (0-3)", "2");
+  option_parser_register(opp, "-gpgpu_ima_prefetch_ipt_size", OPT_INT32,
+                         &gpgpu_ima_prefetch_ipt_size,
+                         "IMA Pattern Table entries per SM", "32");
+  option_parser_register(
+      opp, "-gpgpu_ima_prefetch_chain_csv", OPT_CSTR,
+      &gpgpu_ima_prefetch_chain_csv,
+      "CSV file containing IMA chain specs "
+      "(expects index_pc/data_pc and supports optional function/impl/sm/"
+      "classification columns; runtime only consumes exact_chain rows)",
+      "");
+  option_parser_register(opp, "-gpgpu_ima_prefetch_debug", OPT_BOOL,
+                         &gpgpu_ima_prefetch_debug,
+                         "enable verbose debug prints/assert context for IMA "
+                         "pair-table prefetch flow",
+                         "0");
+  option_parser_register(
+      opp, "-gpgpu_ima_validate_all_idx_pc", OPT_BOOL,
+      &gpgpu_ima_validate_all_idx_pc,
+      "validation mode: on every demand load whose PC is an IMA idx_pc, do "
+      "an exact pair-table lookup and enqueue verify records; bypass stride "
+      "triggering",
+      "0");
+  // GRASP prefetcher options
+  option_parser_register(opp, "-grasp_enable", OPT_BOOL, &grasp_enable,
+                         "enable GRASP IMA prefetcher", "0");
+  option_parser_register(opp, "-grasp_debug", OPT_BOOL, &grasp_debug,
+                         "enable GRASP verbose debug output", "0");
+  option_parser_register(opp, "-grasp_cd_fifo_depth", OPT_UINT32,
+                         &grasp_cd_fifo_depth,
+                         "GRASP Chain Detector FIFO depth", "20");
+  option_parser_register(opp, "-grasp_ct_size", OPT_UINT32, &grasp_ct_size,
+                         "GRASP Chain Table entries per SM", "32");
+  option_parser_register(opp, "-grasp_tt_size", OPT_UINT32, &grasp_tt_size,
+                         "GRASP Target Table entries per SM", "8");
+  option_parser_register(opp, "-grasp_ist_ipt_size", OPT_UINT32,
+                         &grasp_ist_ipt_size,
+                         "GRASP IST (stride tracker) entries per SM", "64");
+  option_parser_register(opp, "-grasp_ist_distance", OPT_UINT32,
+                         &grasp_ist_distance,
+                         "GRASP IST prefetch lookahead depth", "1");
+  option_parser_register(opp, "-grasp_ist_confidence", OPT_UINT32,
+                         &grasp_ist_confidence,
+                         "GRASP IST min confidence to trigger prefetch (0-3)",
+                         "2");
+  option_parser_register(opp, "-grasp_prb_capacity", OPT_UINT32,
+                         &grasp_prb_capacity,
+                         "GRASP Prefetch Request Buffer capacity", "1024");
+  option_parser_register(opp, "-grasp_tc_mshr_threshold", OPT_UINT32,
+                         &grasp_tc_mshr_threshold,
+                         "GRASP throttle: MSHR occupancy %% above which data "
+                         "PF is suppressed",
+                         "80");
   option_parser_register(
       opp, "-n_regfile_gating_group", OPT_UINT32, &n_regfile_gating_group,
       "group of lanes that should be read/written together)", "4");
@@ -686,6 +749,18 @@ void shader_core_config::reg_options(class OptionParser *opp) {
 }
 
 void gpgpu_sim_config::reg_options(option_parser_t opp) {
+  const bool debug_config_reg = getenv("ACCELSIM_DEBUG_CONFIG_REG") != NULL;
+  auto debug_dump_config_reg = [&](const char *tag) {
+    if (!debug_config_reg) return;
+    fprintf(stderr,
+            "[config-reg] %s this=%p runtime_stat=%p l1_en=%d l1_path=%p "
+            "clock_domains=%p stack=%zu pending=%zu\n",
+            tag, (void *)this, (void *)gpgpu_runtime_stat,
+            static_cast<int>(m_l1_trace_enable), (void *)m_l1_trace_path,
+            (void *)gpgpu_clock_domains, stack_size_limit,
+            runtime_pending_launch_count_limit);
+  };
+
   gpgpu_functional_sim_config::reg_options(opp);
   m_shader_config.reg_options(opp);
   m_memory_config.reg_options(opp);
@@ -703,6 +778,7 @@ void gpgpu_sim_config::reg_options(option_parser_t opp) {
       opp, "-gpgpu_runtime_stat", OPT_CSTR, &gpgpu_runtime_stat,
       "display runtime statistics such as dram utilization {<freq>:<flag>}",
       "10000:0");
+  debug_dump_config_reg("after_runtime_stat");
   option_parser_register(opp, "-liveness_message_freq", OPT_INT64,
                          &liveness_message_freq,
                          "Minimum number of seconds between simulation "
@@ -720,6 +796,7 @@ void gpgpu_sim_config::reg_options(option_parser_t opp) {
   option_parser_register(opp, "-gpgpu_flush_l2_cache", OPT_BOOL,
                          &gpgpu_flush_l2_cache,
                          "Flush L2 cache at the end of each kernel call", "0");
+  debug_dump_config_reg("after_flush_cfg");
   option_parser_register(opp, "-l1_trace_enable", OPT_BOOL, &m_l1_trace_enable,
                          "Enable per-lane L1 cache tracing", "0");
   option_parser_register(opp, "-l1_trace_path", OPT_CSTR, &m_l1_trace_path,
@@ -733,6 +810,11 @@ void gpgpu_sim_config::reg_options(option_parser_t opp) {
   option_parser_register(
       opp, "-l1_trace_print_compute", OPT_BOOL, &m_l1_trace_print_compute,
       "Print SM compute-unit lane columns in L1 cache trace", "0");
+  option_parser_register(opp, "-grasp_trace_enable", OPT_BOOL,
+                         &m_grasp_trace_enable,
+                         "Enable structured GRASP prefetcher event trace", "0");
+  option_parser_register(opp, "-grasp_trace_path", OPT_CSTR, &m_grasp_trace_path,
+                         "CSV output path for GRASP event trace", "");
   option_parser_register(opp, "-l2_trace_enable", OPT_BOOL, &m_l2_trace_enable,
                          "Enable per-lane L2 cache tracing (trace model only)",
                          "0");
@@ -750,6 +832,7 @@ void gpgpu_sim_config::reg_options(option_parser_t opp) {
   option_parser_register(opp, "-issue_trace_path", OPT_CSTR,
                          &m_issue_trace_path,
                          "CSV output path for issue/stall trace", "");
+  debug_dump_config_reg("after_trace_paths");
   option_parser_register(opp, "-stall_reason_pc_stats_enable", OPT_BOOL,
                          &m_stall_reason_pc_stats_enable,
                          "Enable lightweight stall reason PC stats", "0");
@@ -789,6 +872,7 @@ void gpgpu_sim_config::reg_options(option_parser_t opp) {
                          &m_hbm_partition_trace_period,
                          "Sampling period in DRAM cycles for partition trace",
                          "1");
+  debug_dump_config_reg("after_bw_trace_cfg");
   option_parser_register(
       opp, "-gpgpu_deadlock_detect", OPT_BOOL, &gpu_deadlock_detect,
       "Stop the simulation at deadlock (1=on (default), 0=off)", "1");
@@ -807,6 +891,7 @@ void gpgpu_sim_config::reg_options(option_parser_t opp) {
                          "Clock Domain Frequencies in MhZ {<Core Clock>:<ICNT "
                          "Clock>:<L2 Clock>:<DRAM Clock>}",
                          "500.0:2000.0:2000.0:2000.0");
+  debug_dump_config_reg("after_clock_domains");
   option_parser_register(
       opp, "-gpgpu_max_concurrent_kernel", OPT_INT32, &max_concurrent_kernel,
       "maximum kernels that can run concurrently on GPU, set this value "
@@ -825,6 +910,7 @@ void gpgpu_sim_config::reg_options(option_parser_t opp) {
       opp, "-visualizer_zlevel", OPT_INT32, &g_visualizer_zlevel,
       "Compression level of the visualizer output log (0=no comp, 9=highest)",
       "6");
+  debug_dump_config_reg("after_visualizer");
   option_parser_register(opp, "-gpgpu_stack_size_limit", OPT_INT32,
                          &stack_size_limit, "GPU thread stack size", "1024");
   option_parser_register(opp, "-gpgpu_heap_size_limit", OPT_INT32,
@@ -835,6 +921,7 @@ void gpgpu_sim_config::reg_options(option_parser_t opp) {
   option_parser_register(opp, "-gpgpu_runtime_pending_launch_count_limit",
                          OPT_INT32, &runtime_pending_launch_count_limit,
                          "GPU device runtime pending launch count", "2048");
+  debug_dump_config_reg("after_runtime_limits");
   option_parser_register(opp, "-trace_enabled", OPT_BOOL, &Trace::enabled,
                          "Turn on traces", "0");
   option_parser_register(opp, "-trace_components", OPT_CSTR, &Trace::config_str,
@@ -850,7 +937,9 @@ void gpgpu_sim_config::reg_options(option_parser_t opp) {
                          "The memory partition which is printed using "
                          "MEMPART_DPRINTF. Default -1 (i.e. all)",
                          "-1");
+  debug_dump_config_reg("after_trace_debug_cfg");
   gpgpu_ctx->stats->ptx_file_line_stats_options(opp);
+  debug_dump_config_reg("after_ptx_stats");
 
   // Jin: kernel launch latency
   option_parser_register(opp, "-gpgpu_kernel_launch_latency", OPT_INT32,
@@ -864,6 +953,7 @@ void gpgpu_sim_config::reg_options(option_parser_t opp) {
                          &(gpgpu_ctx->device_runtime->g_TB_launch_latency),
                          "thread block launch latency in cycles. Default: 0",
                          "0");
+  debug_dump_config_reg("after_reg_options");
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1029,6 +1119,7 @@ void gpgpu_sim::set_kernel_done(kernel_info_t *kernel) {
   }
   assert(k != m_running_kernels.end());
   l1_tracer::flush_all();
+  grasp_tracer::flush_all();
   l2_tracer::flush_all();
   issue_tracer::flush_all();
   icnt_tracer::flush();
@@ -1191,6 +1282,8 @@ gpgpu_sim::gpgpu_sim(const gpgpu_sim_config &config, gpgpu_context *ctx)
   l1_tracer::init(m_config.l1_trace_enabled(), m_config.l1_trace_path(),
                   m_config.num_shader(), m_config.l1_trace_print_bw(),
                   m_config.l1_trace_print_compute());
+  grasp_tracer::init(m_config.grasp_trace_enabled(),
+                     m_config.grasp_trace_path(), m_config.num_shader());
   issue_tracer::init(m_config.issue_trace_enabled(),
                      m_config.issue_trace_path(), m_config.num_shader());
   stall_reason_pc_stats::init(m_config.stall_reason_pc_stats_enabled(),
@@ -1524,6 +1617,7 @@ void gpgpu_sim::print_stats(unsigned long long streamID) {
         "----------\n");
   }
   l1_tracer::flush_all();
+  grasp_tracer::flush_all();
   l2_tracer::flush_all();
   issue_tracer::flush_all();
   stall_reason_pc_stats::dump();
@@ -1785,6 +1879,15 @@ void gpgpu_sim::gpu_print_stat(unsigned long long streamID) {
   core_cache_stats.print_fail_stats(stdout, streamID,
                                     "Total_core_cache_fail_stats_breakdown");
   shader_print_scheduler_stat(stdout, false);
+
+  // GRASP prefetcher stats (per-SM)
+  if (m_shader_config->grasp_enable) {
+    printf("\n========= GRASP Prefetcher Stats =========\n");
+    for (unsigned i = 0; i < m_config.num_cluster(); i++) {
+      m_cluster[i]->print_grasp_stats(stdout);
+    }
+    printf("==========================================\n");
+  }
 
   m_shader_stats->print(stdout);
 #ifdef GPGPUSIM_POWER_MODEL

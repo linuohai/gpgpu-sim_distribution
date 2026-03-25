@@ -51,11 +51,14 @@
 #include "gpu-misc.h"
 #include "gpu-sim.h"
 #include "issue_tracer.h"
+#include "l1_tracer.h"
 #include "icnt_wrapper.h"
 #include "mem_fetch.h"
 #include "mem_latency_stat.h"
 #include "shader_trace.h"
 #include "stall_reason_pc_stats.h"
+// trace_warp_inst_t::get_sass_opcode() is accessed via virtual dispatch
+// (warp_inst_t::get_sass_opcode() defined in abstract_hardware_model.h)
 #include "stat-tool.h"
 #include "traffic_breakdown.h"
 #include "visualizer.h"
@@ -509,6 +512,7 @@ std::list<unsigned> shader_core_ctx::get_regs_written(const inst_t &fvt) const {
 
 void exec_shader_core_ctx::create_shd_warp() {
   m_warp.resize(m_config->max_warps_per_shader);
+  m_warp_cta_uid.assign(m_config->max_warps_per_shader, (unsigned)-1);
   for (unsigned k = 0; k < m_config->max_warps_per_shader; ++k) {
     m_warp[k] = new shd_warp_t(this, m_config->warp_size);
   }
@@ -1116,8 +1120,12 @@ void shader_core_ctx::reinit(unsigned start_thread, unsigned end_thread,
   const unsigned start_warp = start_thread / warp_size;
   const unsigned end_warp =
       (end_thread + warp_size - 1) / warp_size;  // ceil(end_thread/warp_size)
+  if (m_warp_cta_uid.size() != m_warp.size()) {
+    m_warp_cta_uid.assign(m_warp.size(), (unsigned)-1);
+  }
   for (unsigned i = start_warp; i < end_warp; ++i) {
     m_warp[i]->reset();
+    m_warp_cta_uid[i] = (unsigned)-1;
     m_simt_stack[i]->reset();
   }
 }
@@ -1125,8 +1133,16 @@ void shader_core_ctx::reinit(unsigned start_thread, unsigned end_thread,
 void shader_core_ctx::init_warps(unsigned cta_id, unsigned start_thread,
                                  unsigned end_thread, unsigned ctaid,
                                  int cta_size, kernel_info_t &kernel) {
+  // Hook 6: GRASP kernel launch — reset or preserve state based on kernel identity
+  if (m_ldst_unit && m_ldst_unit->grasp_enabled() && ctaid == 0) {
+    m_ldst_unit->grasp()->on_kernel_launch(
+        static_cast<const void *>(kernel.entry()));
+  }
   address_type start_pc = next_pc(start_thread);
   unsigned kernel_id = kernel.get_uid();
+  if (m_warp_cta_uid.size() != m_warp.size()) {
+    m_warp_cta_uid.assign(m_warp.size(), (unsigned)-1);
+  }
   if (m_config->model == POST_DOMINATOR) {
     unsigned start_warp = start_thread / m_config->warp_size;
     unsigned warp_per_cta = cta_size / m_config->warp_size;
@@ -1163,6 +1179,7 @@ void shader_core_ctx::init_warps(unsigned cta_id, unsigned start_thread,
         start_pc = pc;
       }
 
+      m_warp_cta_uid[i] = ctaid;
       m_warp[i]->init(start_pc, cta_id, i, active_threads, m_dynamic_warp_id,
                       kernel.get_streamID());
       ++m_dynamic_warp_id;
@@ -1560,7 +1577,13 @@ void shader_core_ctx::fetch() {
               did_exit = true;
             }
           }
-          if (did_exit) m_warp[warp_id]->set_done_exit();
+          if (did_exit) {
+            m_warp[warp_id]->set_done_exit();
+            // Hook 7: GRASP warp exit — clean tracked warp state
+            if (m_ldst_unit->grasp_enabled()) {
+              m_ldst_unit->grasp()->on_warp_exit(warp_id);
+            }
+          }
           --m_active_warps;
           assert(m_active_warps >= 0);
         }
@@ -1644,6 +1667,16 @@ void shader_core_ctx::issue_warp(register_set &pipe_reg_set,
   m_stats->shader_cycle_distro[2 + (*pipe_reg)->active_count()]++;
   func_exec_inst(**pipe_reg);
 
+  // Hook 1: GRASP CD training — detect LDG→IMAD.WIDE→LDG chains
+  if (m_ldst_unit->grasp_enabled()) {
+    const warp_inst_t &inst = **pipe_reg;
+    // get_sass_opcode() dispatches virtually to trace_warp_inst_t override
+    const std::string &sass_opcode = next_inst->get_sass_opcode();
+    m_ldst_unit->grasp()->on_instruction_issue(
+        warp_id, inst, sass_opcode,
+        m_gpu->gpu_tot_sim_cycle + m_gpu->gpu_sim_cycle);
+  }
+
   if (issue_tracer::enabled() && m_gpu->issue_trace_enabled()) {
     const warp_inst_t &issued_inst = **pipe_reg;
     const unsigned long long cycle =
@@ -1662,9 +1695,11 @@ void shader_core_ctx::issue_warp(register_set &pipe_reg_set,
                          : -1;
     double hbm_bw = m_gpu ? m_gpu->get_last_hbm_bandwidth_gbps() : 0.0;
     double hbm_occ = m_gpu ? m_gpu->get_last_hbm_occupancy() : 0.0;
-    issue_tracer::emit_issue(m_sid, warp_id, sch_id, warp_group, cycle,
-                             active_mask, opcode, space, issued_inst.pc,
-                             sector_addresses, sector_lanes, hbm_bw, hbm_occ);
+    issue_tracer::emit_issue(
+        m_sid, warp_id, sch_id, warp_group,
+        static_cast<int>(get_warp_cta_uid(warp_id)), cycle, active_mask,
+        opcode, space, issued_inst.pc, sector_addresses, sector_lanes, hbm_bw,
+        hbm_occ);
   }
 
   // Add LDGSTS instructions into a buffer
@@ -2433,13 +2468,19 @@ void scheduler_unit::cycle() {
     int warp_group = m_shader->n_level_enabled()
                          ? static_cast<int>(m_shader->n_level_current_group())
                          : -1;
+    int cta_uid = -1;
+    if (sample_warp >= 0 &&
+        sample_warp < static_cast<int>(m_shader->m_config->max_warps_per_shader)) {
+      cta_uid = static_cast<int>(m_shader->get_warp_cta_uid(sample_warp));
+    }
     gpgpu_sim *gpu = m_shader->get_gpu();
     double hbm_bw = gpu ? gpu->get_last_hbm_bandwidth_gbps() : 0.0;
     double hbm_occ = gpu ? gpu->get_last_hbm_occupancy() : 0.0;
     issue_tracer::emit_stall(m_shader->get_sid(), sample_warp, warp_group,
-                             cycle, mask_ptr, opcode_col, std::string(),
-                             sample_pc, m_id, stall_reason_counts, one_reason,
-                             hbm_bw, hbm_occ);
+                             cta_uid, cycle, mask_ptr, opcode_col,
+                             std::string(), sample_pc, m_id,
+                             stall_reason_counts, one_reason, hbm_bw,
+                             hbm_occ);
   }
 }
 
@@ -3158,6 +3199,61 @@ void ldst_unit::L1_latency_queue_cycle() {
       bool write_sent = was_write_sent(events);
       bool read_sent = was_read_sent(events);
 
+      // GRASP / IMA prefetch trigger on global reads.
+      if (mf_next->get_access_type() == GLOBAL_ACC_R &&
+          !mf_next->get_inst().is_store()) {
+        unsigned long long cycle = m_core->get_gpu()->gpu_sim_cycle +
+                                   m_core->get_gpu()->gpu_tot_sim_cycle;
+        shd_warp_t *warp = m_core->get_warp_ptr(mf_next->get_wid());
+        if (m_grasp) {
+          // GRASP mode: delegate to grasp_prefetcher_t
+          m_grasp->on_demand_load(mf_next->get_wid(), mf_next->get_pc(),
+                                  mf_next->get_addr(), cycle, warp,
+                                  mf_next);
+        } else if (m_config->gpgpu_ima_prefetch_enable) {
+          // Legacy IMA mode
+          std::vector<unsigned> seed_chain_ids;
+          if (warp != NULL) {
+            seed_chain_ids = warp->get_ima_seed_chain_ids(
+                static_cast<address_type>(mf_next->get_pc()));
+          }
+          if (m_config->gpgpu_ima_validate_all_idx_pc) {
+            if (warp != NULL && !seed_chain_ids.empty()) {
+              const warp_inst_t &inst = mf_next->get_inst();
+              size_t total_hits = 0;
+              unsigned active_lanes = 0;
+              for (unsigned lane = 0; lane < inst.warp_size(); ++lane) {
+                if (!inst.active(lane)) continue;
+                ++active_lanes;
+                std::vector<ima_prefetch_candidate_t> cands =
+                    warp->lookup_ima_prefetch_candidates(
+                        inst.get_addr(lane), seed_chain_ids,
+                        /*exact_match_only=*/true);
+                total_hits += cands.size();
+                warp->record_ima_verify_predictions(
+                    cands, cycle, m_config->gpgpu_ima_prefetch_debug,
+                    /*dedupe_pending=*/false);
+              }
+              if (m_config->gpgpu_ima_prefetch_debug) {
+                printf(
+                    "IMA validate lookup: sid=%u warp=%u pc=0x%04llx "
+                    "lanes=%u chains=%zu hits=%zu cycle=%llu\n",
+                    m_sid, mf_next->get_wid(),
+                    (unsigned long long)mf_next->get_pc(),
+                    active_lanes, seed_chain_ids.size(), total_hits, cycle);
+              }
+            }
+          } else if (m_ima_prefetcher) {
+            auto pfaddrs = m_ima_prefetcher->on_load_access(
+                mf_next->get_pc(), mf_next->get_addr(), cycle);
+            for (auto &pa : pfaddrs) {
+              queue_ima_prefetch_request(pa, mf_next->get_wid(),
+                                         seed_chain_ids, cycle);
+            }
+          }
+        }
+      }
+
       if (status == HIT) {
         assert(!read_sent);
         l1_latency_queue[j][0] = NULL;
@@ -3665,6 +3761,10 @@ void ldst_unit::init(mem_fetch_interface *icnt,
   m_next_global = NULL;
   m_last_inst_gpu_sim_cycle = 0;
   m_last_inst_gpu_tot_sim_cycle = 0;
+  m_ima_prefetcher = nullptr;
+  m_prefetch_queue.clear();
+  m_ima_prb.clear();
+  m_grasp = nullptr;
 }
 
 ldst_unit::ldst_unit(mem_fetch_interface *icnt,
@@ -3694,6 +3794,30 @@ ldst_unit::ldst_unit(mem_fetch_interface *icnt,
                                  (mem_fetch *)NULL);
   }
   m_name = "MEM ";
+  // Initialize IMA prefetcher when enabled and L1D is present.
+  if (m_config->grasp_enable && m_L1D != nullptr) {
+    // GRASP mode: use the new GRASP prefetcher
+    grasp_config_t gcfg;
+    gcfg.enable = true;
+    gcfg.debug = m_config->grasp_debug;
+    gcfg.cd_fifo_depth = m_config->grasp_cd_fifo_depth;
+    gcfg.ct_size = m_config->grasp_ct_size;
+    gcfg.tt_size = m_config->grasp_tt_size;
+    gcfg.ist_ipt_size = m_config->grasp_ist_ipt_size;
+    gcfg.ist_distance = m_config->grasp_ist_distance;
+    gcfg.ist_confidence = m_config->grasp_ist_confidence;
+    gcfg.prb_capacity = m_config->grasp_prb_capacity;
+    gcfg.chain_csv = m_config->gpgpu_ima_prefetch_chain_csv;
+    gcfg.tc_mshr_threshold = m_config->grasp_tc_mshr_threshold;
+    m_grasp = new grasp_prefetcher_t(m_sid, gcfg);
+  } else if (m_config->gpgpu_ima_prefetch_enable && m_L1D != nullptr) {
+    // Legacy IMA mode
+    m_ima_prefetcher = new ima_prefetcher_t(
+        m_sid, (unsigned)m_config->gpgpu_ima_prefetch_ipt_size,
+        (unsigned)m_config->gpgpu_ima_prefetch_distance,
+        (unsigned)m_config->gpgpu_ima_prefetch_confidence);
+    m_ima_prb.resize(64);
+  }
 }
 
 ldst_unit::ldst_unit(mem_fetch_interface *icnt,
@@ -3707,6 +3831,27 @@ ldst_unit::ldst_unit(mem_fetch_interface *icnt,
       m_next_wb(config) {
   init(icnt, mf_allocator, core, operand_collector, scoreboard, config,
        mem_config, stats, sid, tpc);
+  if (m_config->grasp_enable && m_L1D != nullptr) {
+    grasp_config_t gcfg;
+    gcfg.enable = true;
+    gcfg.debug = m_config->grasp_debug;
+    gcfg.cd_fifo_depth = m_config->grasp_cd_fifo_depth;
+    gcfg.ct_size = m_config->grasp_ct_size;
+    gcfg.tt_size = m_config->grasp_tt_size;
+    gcfg.ist_ipt_size = m_config->grasp_ist_ipt_size;
+    gcfg.ist_distance = m_config->grasp_ist_distance;
+    gcfg.ist_confidence = m_config->grasp_ist_confidence;
+    gcfg.prb_capacity = m_config->grasp_prb_capacity;
+    gcfg.chain_csv = m_config->gpgpu_ima_prefetch_chain_csv;
+    gcfg.tc_mshr_threshold = m_config->grasp_tc_mshr_threshold;
+    m_grasp = new grasp_prefetcher_t(m_sid, gcfg);
+  } else if (m_config->gpgpu_ima_prefetch_enable && m_L1D != nullptr) {
+    m_ima_prefetcher = new ima_prefetcher_t(
+        m_sid, (unsigned)m_config->gpgpu_ima_prefetch_ipt_size,
+        (unsigned)m_config->gpgpu_ima_prefetch_distance,
+        (unsigned)m_config->gpgpu_ima_prefetch_confidence);
+    m_ima_prb.resize(64);
+  }
 }
 
 void ldst_unit::issue(register_set &reg_set) {
@@ -3832,9 +3977,15 @@ void ldst_unit::writeback() {
       case 4:
         if (m_L1D && m_L1D->access_ready()) {
           mem_fetch *mf = m_L1D->next_access();
-          m_next_wb = mf->get_inst();
+          if (!mf->get_inst().empty()) {
+            // Normal demand fill: writeback output registers.
+            m_next_wb = mf->get_inst();
+            serviced_client = next_client;
+          }
+          // Prefetch fill (empty inst): data is now in L1; no register writeback.
+          // serviced_client intentionally not set so the loop continues seeking
+          // real demand writeback work.
           delete mf;
-          serviced_client = next_client;
         }
         break;
       default:
@@ -3878,6 +4029,181 @@ inst->space.get_type() != shared_space) { unsigned warp_id = inst->warp_id();
    pipelined_simd_unit::issue(reg_set);
 }
 */
+
+void ldst_unit::queue_ima_prefetch_request(
+    new_addr_type addr, unsigned warp_id,
+    const std::vector<unsigned> &seed_chain_ids,
+    unsigned long long ready_cycle) {
+  ima_pending_prefetch_request_t req;
+  req.addr = addr;
+  req.warp_id = warp_id;
+  req.seed_chain_ids = seed_chain_ids;
+  req.ready_cycle = ready_cycle;
+  m_prefetch_queue.push_back(req);
+}
+
+int ldst_unit::alloc_ima_prb_entry(
+    unsigned warp_id, const std::vector<ima_prefetch_candidate_t> &cands) {
+  for (size_t i = 0; i < m_ima_prb.size(); ++i) {
+    if (!m_ima_prb[i].valid) {
+      m_ima_prb[i].valid = true;
+      m_ima_prb[i].warp_id = warp_id;
+      m_ima_prb[i].candidates = cands;
+      return static_cast<int>(i);
+    }
+  }
+  ima_prb_entry_t entry;
+  entry.valid = true;
+  entry.warp_id = warp_id;
+  entry.candidates = cands;
+  m_ima_prb.push_back(entry);
+  return static_cast<int>(m_ima_prb.size() - 1);
+}
+
+void ldst_unit::free_ima_prb_entry(unsigned prb_entry_id) {
+  if (prb_entry_id >= m_ima_prb.size()) return;
+  m_ima_prb[prb_entry_id].valid = false;
+  m_ima_prb[prb_entry_id].warp_id = (unsigned)-1;
+  m_ima_prb[prb_entry_id].candidates.clear();
+}
+
+void ldst_unit::release_ima_prb_targets(unsigned prb_entry_id,
+                                        unsigned long long ready_cycle,
+                                        const char *reason) {
+  assert(prb_entry_id < m_ima_prb.size());
+  assert(m_ima_prb[prb_entry_id].valid);
+  const ima_prb_entry_t &entry = m_ima_prb[prb_entry_id];
+  if (m_config->gpgpu_ima_prefetch_debug) {
+    printf(
+        "IMA fill dispatch: sid=%u prb=%u reason=%s warp=%u targets=%zu "
+        "ready=%llu\n",
+        m_sid, prb_entry_id, reason, entry.warp_id, entry.candidates.size(),
+        ready_cycle);
+  }
+  for (const ima_prefetch_candidate_t &cand : entry.candidates) {
+    queue_ima_prefetch_request(cand.data_addr, entry.warp_id,
+                               cand.successor_chain_ids, ready_cycle);
+    if (m_config->gpgpu_ima_prefetch_debug) {
+      printf("  target chain=%u idx=0x%llx data=0x%llx succ=%zu\n",
+             cand.source_chain_id, (unsigned long long)cand.idx_addr,
+             (unsigned long long)cand.data_addr,
+             cand.successor_chain_ids.size());
+    }
+  }
+}
+
+void ldst_unit::on_ima_prefetch_fill(mem_fetch *mf,
+                                     unsigned long long fill_cycle) {
+  if (mf == NULL || !mf->is_ima_prefetch()) return;
+  if (mf->get_ima_kind() != IMA_PREFETCH_INDEX) return;
+  unsigned prb_entry_id = mf->get_ima_prb_entry_id();
+  if (prb_entry_id == (unsigned)-1) return;
+  assert(prb_entry_id < m_ima_prb.size());
+  release_ima_prb_targets(prb_entry_id, fill_cycle + 1, "fill");
+  free_ima_prb_entry(prb_entry_id);
+}
+
+int ldst_unit::find_ready_ima_prefetch(unsigned long long cycle) const {
+  for (size_t i = 0; i < m_prefetch_queue.size(); ++i) {
+    if (m_prefetch_queue[i].ready_cycle <= cycle) return static_cast<int>(i);
+  }
+  return -1;
+}
+
+// ---------------------------------------------------------------------------
+// IMA Prefetch injection
+// ---------------------------------------------------------------------------
+// Each cycle, attempt to drain one pending prefetch from m_prefetch_queue into
+// L1D.  The cache's own tag/MSHR logic will filter the request if the data is
+// already present (HIT) or already in-flight (MSHR_HIT / HIT_RESERVED).
+// On RESERVATION_FAIL (MSHR full), the address is simply discarded to avoid
+// back-pressure on demand traffic.  On a true MISS the cache owns the mf and
+// will send it to L2; we count it as a successfully issued prefetch.
+void ldst_unit::inject_ima_prefetches(unsigned long long cycle) {
+  if (!m_ima_prefetcher || !m_L1D || m_prefetch_queue.empty()) return;
+
+  int ready_idx = find_ready_ima_prefetch(cycle);
+  if (ready_idx < 0) return;
+
+  ima_pending_prefetch_request_t req = m_prefetch_queue[ready_idx];
+  m_prefetch_queue.erase(m_prefetch_queue.begin() + ready_idx);
+
+  new_addr_type paddr = req.addr;
+
+  // Compute the sector mask for this address (128B cache line, 32B sector).
+  const unsigned line_sz = m_config->m_L1D_config.get_line_sz();  // 128
+  const unsigned sector_sz = SECTOR_SIZE;                          // 32
+  unsigned sector_idx = (paddr % line_sz) / sector_sz;
+  mem_access_sector_mask_t sector_mask;
+  sector_mask.set(sector_idx);
+  mem_access_byte_mask_t byte_mask;
+  byte_mask.set();
+  active_mask_t all_active;
+  all_active.set();
+
+  mem_access_t prefetch_acc(GLOBAL_ACC_R, paddr, sector_sz, /*wr=*/false,
+                             all_active, byte_mask, sector_mask,
+                             m_config->gpgpu_ctx);
+
+  int prb_entry_id = -1;
+  ima_prefetch_kind_t pf_kind =
+      req.seed_chain_ids.empty() ? IMA_PREFETCH_DATA : IMA_PREFETCH_INDEX;
+  if (!req.seed_chain_ids.empty()) {
+    shd_warp_t *warp = m_core->get_warp_ptr(req.warp_id);
+    assert(warp != NULL);
+    std::vector<ima_prefetch_candidate_t> cands = warp->lookup_ima_prefetch_candidates(
+        req.addr, req.seed_chain_ids);
+    warp->record_ima_verify_predictions(
+        cands, cycle, m_config->gpgpu_ima_prefetch_debug);
+    if (!cands.empty()) prb_entry_id = alloc_ima_prb_entry(req.warp_id, cands);
+    if (m_config->gpgpu_ima_prefetch_debug) {
+      printf(
+          "IMA issue lookup: sid=%u warp=%u addr=0x%llx chains=%zu hits=%zu "
+          "prb=%d cycle=%llu\n",
+          m_sid, req.warp_id, (unsigned long long)req.addr,
+          req.seed_chain_ids.size(), cands.size(), prb_entry_id, cycle);
+    }
+  }
+
+  mem_fetch *pf_mf =
+      new mem_fetch(prefetch_acc, /*inst=*/nullptr, /*streamID=*/0,
+                    READ_PACKET_SIZE, /*wid=*/req.warp_id, m_sid, m_tpc,
+                    m_memory_config, cycle);
+  pf_mf->set_ima_metadata(pf_kind,
+                          prb_entry_id >= 0 ? (unsigned)prb_entry_id
+                                            : (unsigned)-1);
+
+  std::list<cache_event> events;
+  enum cache_request_status status = m_L1D->access(paddr, pf_mf, cycle, events);
+
+  if (status == HIT) {
+    if (prb_entry_id >= 0) {
+      release_ima_prb_targets((unsigned)prb_entry_id, cycle + 1, "hit");
+      free_ima_prb_entry((unsigned)prb_entry_id);
+    }
+    ++m_ima_prefetcher->stat_prefetch_filtered;
+    delete pf_mf;
+  } else if (status == MSHR_HIT || status == HIT_RESERVED) {
+    if (prb_entry_id >= 0) free_ima_prb_entry((unsigned)prb_entry_id);
+    if (m_config->gpgpu_ima_prefetch_debug) {
+      printf(
+          "IMA prefetch dropped on in-flight line: sid=%u warp=%u addr=0x%llx "
+          "status=%d cycle=%llu\n",
+          m_sid, req.warp_id, (unsigned long long)req.addr, status, cycle);
+    }
+    ++m_ima_prefetcher->stat_prefetch_filtered;
+    delete pf_mf;
+  } else if (status == RESERVATION_FAIL) {
+    // MSHR / miss-queue full: discard rather than stall demand traffic.
+    if (prb_entry_id >= 0) free_ima_prb_entry((unsigned)prb_entry_id);
+    ++m_ima_prefetcher->stat_prefetch_filtered;
+    delete pf_mf;
+  } else {
+    // MISS or SECTOR_MISS: cache took ownership of pf_mf, will fetch from L2.
+    ++m_ima_prefetcher->stat_prefetch_issued;
+  }
+}
+
 void ldst_unit::cycle() {
   writeback();
 
@@ -3933,8 +4259,18 @@ void ldst_unit::cycle() {
           }
         } else {
           if (m_L1D->fill_port_free()) {
-            m_L1D->fill(mf, m_core->get_gpu()->gpu_sim_cycle +
-                                m_core->get_gpu()->gpu_tot_sim_cycle);
+            unsigned long long fill_cycle =
+                m_core->get_gpu()->gpu_sim_cycle +
+                m_core->get_gpu()->gpu_tot_sim_cycle;
+            m_L1D->fill(mf, fill_cycle);
+            l1_tracer::emit_fill(mf->get_sid(), mf->get_wid(), mf,
+                                 fill_cycle,
+                                 m_config->m_L1D_config.get_line_sz());
+            if (m_grasp) {
+              m_grasp->on_fill(mf, fill_cycle);
+            } else {
+              on_ima_prefetch_fill(mf, fill_cycle);
+            }
             m_response_fifo.pop_front();
           }
         }
@@ -3945,6 +4281,25 @@ void ldst_unit::cycle() {
   m_L1T->cycle();
   m_L1C->cycle();
   if (m_L1D) {
+    // Drain one prefetch per cycle before the demand pipeline runs.
+    unsigned long long cur_cycle = m_core->get_gpu()->gpu_sim_cycle +
+                                   m_core->get_gpu()->gpu_tot_sim_cycle;
+    if (m_grasp) {
+      auto result = m_grasp->inject_prefetch(
+          cur_cycle, m_L1D, m_mf_allocator, m_sid, m_tpc, m_memory_config,
+          m_config->m_L1D_config.get_line_sz(), m_config->gpgpu_ctx,
+          [this](unsigned wid) -> shd_warp_t * {
+            return m_core->get_warp_ptr(wid);
+          });
+      for (mem_fetch *pf_mf : result.requests) {
+        std::list<cache_event> events;
+        enum cache_request_status status =
+            m_L1D->access(pf_mf->get_addr(), pf_mf, cur_cycle, events);
+        m_grasp->on_l1_access_result(pf_mf, status, cur_cycle);
+      }
+    } else {
+      inject_ima_prefetches(cur_cycle);
+    }
     m_L1D->cycle();
     if (m_config->m_L1D_config.l1_latency > 0) L1_latency_queue_cycle();
   }
@@ -5100,6 +5455,7 @@ void barrier_set_t::warp_reaches_barrier(unsigned cta_id, unsigned warp_id,
 void barrier_set_t::warp_exit(unsigned warp_id) {
   // caller needs to verify all threads in warp are done, e.g., by checking PDOM
   // stack to see it has only one entry during exit_impl()
+  if (!m_warp_active.test(warp_id)) return;
   m_warp_active.reset(warp_id);
 
   // test for barrier release
@@ -5107,6 +5463,7 @@ void barrier_set_t::warp_exit(unsigned warp_id) {
   for (; w != m_cta_to_warps.end(); ++w) {
     if (w->second.test(warp_id) == true) break;
   }
+  if (w == m_cta_to_warps.end()) return;
   warp_set_t warps_in_cta = w->second;
   warp_set_t active = warps_in_cta & m_warp_active;
 
@@ -5255,6 +5612,12 @@ void shader_core_ctx::store_ack(class mem_fetch *mf) {
 void shader_core_ctx::print_cache_stats(FILE *fp, unsigned &dl1_accesses,
                                         unsigned &dl1_misses) {
   m_ldst_unit->print_cache_stats(fp, dl1_accesses, dl1_misses);
+}
+
+void shader_core_ctx::print_grasp_stats(FILE *fp) const {
+  if (m_ldst_unit->grasp_enabled()) {
+    m_ldst_unit->grasp()->print_stats(fp);
+  }
 }
 
 void shader_core_ctx::get_cache_stats(cache_stats &cs) {
@@ -6047,6 +6410,12 @@ void simt_core_cluster::print_cache_stats(FILE *fp, unsigned &dl1_accesses,
                                           unsigned &dl1_misses) const {
   for (unsigned i = 0; i < m_config->n_simt_cores_per_cluster; ++i) {
     m_core[i]->print_cache_stats(fp, dl1_accesses, dl1_misses);
+  }
+}
+
+void simt_core_cluster::print_grasp_stats(FILE *fp) const {
+  for (unsigned i = 0; i < m_config->n_simt_cores_per_cluster; ++i) {
+    m_core[i]->print_grasp_stats(fp);
   }
 }
 

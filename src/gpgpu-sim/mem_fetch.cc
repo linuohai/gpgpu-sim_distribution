@@ -39,7 +39,11 @@ mem_fetch::mem_fetch(const mem_access_t &access, const warp_inst_t *inst,
                      unsigned wid, unsigned sid, unsigned tpc,
                      const memory_config *config, unsigned long long cycle,
                      mem_fetch *m_original_mf, mem_fetch *m_original_wr_mf)
-    : m_access(access), m_dbg_has_op(false), m_dbg_is_store(false)
+    : m_access(access),
+      m_dbg_has_op(false),
+      m_dbg_is_store(false),
+      m_ima_kind(IMA_PREFETCH_NONE),
+      m_ima_prb_entry_id((unsigned)-1)
 
 {
   m_request_uid = sm_next_mf_request_uid++;

@@ -25,14 +25,16 @@ class issue_tracer {
  public:
   static void init(bool enable, const char *path, unsigned n_sms);
   static void emit_issue(unsigned sid, unsigned wid, unsigned sch_id,
-                         int warp_group, unsigned long long cycle,
+                         int warp_group, int cta_uid,
+                         unsigned long long cycle,
                          const active_mask_t &mask, const std::string &opcode,
                          const std::string &space, address_type pc,
                          const std::string &sector_addresses,
                          const std::string &sector_lane_ids,
                          double hbm_bandwidth_gbps, double hbm_occupancy);
   static void emit_stall(unsigned sid, int sample_warp, int warp_group,
-                         unsigned long long cycle, const active_mask_t *mask,
+                         int cta_uid, unsigned long long cycle,
+                         const active_mask_t *mask,
                          const std::string &opcode,
                          const std::string &space, address_type pc,
                          int scheduler_id, const issue_stall_counts &counts,

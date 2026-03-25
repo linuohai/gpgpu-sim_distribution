@@ -1051,6 +1051,10 @@ class mshr_table {
   // Returns true if there is a pending read after write
   bool is_read_after_write_pending(new_addr_type block_addr);
 
+  // GRASP throttle: MSHR occupancy query
+  unsigned occupancy() const { return m_data.size(); }
+  unsigned capacity() const { return m_num_entries; }
+
   void check_mshr_parameters(unsigned num_entries, unsigned max_merged) {
     assert(m_num_entries == num_entries &&
            "Change of MSHR parameters between kernels is not allowed");
@@ -1324,6 +1328,11 @@ class baseline_cache : public cache_t {
   bool access_ready() const { return m_mshrs.access_ready(); }
   /// Pop next ready access (does not include accesses that "HIT")
   mem_fetch *next_access() { return m_mshrs.next_access(); }
+  /// GRASP throttle: MSHR occupancy ratio (0.0 ~ 1.0)
+  float mshr_occupancy_ratio() const {
+    unsigned cap = m_mshrs.capacity();
+    return cap > 0 ? (float)m_mshrs.occupancy() / cap : 0.0f;
+  }
   // flash invalidate all entries in cache
   void flush() { m_tag_array->flush(); }
   void invalidate() { m_tag_array->invalidate(); }

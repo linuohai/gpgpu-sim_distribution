@@ -41,8 +41,9 @@ if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
 else()
     add_compile_definitions(DEBUG=0)
     # Override the default release flags to keep asserts enabled
-    set(CMAKE_CXX_FLAGS_RELEASE "-Wall -O3 -g3 -fPIC")
-    set(CMAKE_C_FLAGS_RELEASE "-Wall -O3 -g3 -fPIC")
+    set(CMAKE_CXX_FLAGS_RELEASE "-Wall -O3 -g3 -fPIC -march=native")
+    set(CMAKE_C_FLAGS_RELEASE "-Wall -O3 -g3 -fPIC -march=native")
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 endif()
 
 # Add CUDA version

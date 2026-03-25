@@ -415,6 +415,8 @@ class gpgpu_sim_config : public power_config,
     gpgpu_ctx = ctx;
     m_l1_trace_enable = false;
     m_l1_trace_path = NULL;
+    m_grasp_trace_enable = false;
+    m_grasp_trace_path = NULL;
     m_l1_trace_debug = false;
     m_l1_trace_print_bw = false;
     m_l1_trace_print_compute = false;
@@ -497,6 +499,13 @@ class gpgpu_sim_config : public power_config,
   const char *l1_trace_path() const {
     return m_l1_trace_path ? m_l1_trace_path : "";
   }
+  bool grasp_trace_enabled() const {
+    return m_grasp_trace_enable && m_grasp_trace_path &&
+           m_grasp_trace_path[0] != '\0';
+  }
+  const char *grasp_trace_path() const {
+    return m_grasp_trace_path ? m_grasp_trace_path : "";
+  }
   bool l1_trace_debug_enabled() const { return m_l1_trace_debug; }
   bool l1_trace_print_bw() const { return m_l1_trace_print_bw; }
   bool l1_trace_print_compute() const { return m_l1_trace_print_compute; }
@@ -559,6 +568,13 @@ class gpgpu_sim_config : public power_config,
   unsigned hbm_partition_trace_period() const {
     return m_hbm_partition_trace_period ? m_hbm_partition_trace_period : 1;
   }
+  void debug_dump_config_pointers(FILE *fout, const char *tag) const {
+    fprintf(fout,
+            "[config-init] %s cfg=%p runtime_stat=%p trace_path=%p "
+            "clock_domains=%p\n",
+            tag, (const void *)this, (const void *)gpgpu_runtime_stat,
+            (const void *)m_l1_trace_path, (const void *)gpgpu_clock_domains);
+  }
 
  private:
   void init_clock_domains(void);
@@ -593,6 +609,8 @@ class gpgpu_sim_config : public power_config,
   unsigned max_concurrent_kernel;
   bool m_l1_trace_enable;
   char *m_l1_trace_path;
+  bool m_grasp_trace_enable;
+  char *m_grasp_trace_path;
   bool m_l1_trace_debug;
   bool m_l1_trace_print_bw;
   bool m_l1_trace_print_compute;

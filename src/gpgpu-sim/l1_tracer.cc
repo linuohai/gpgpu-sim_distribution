@@ -68,7 +68,7 @@ void l1_tracer::init(bool enable, const char *path, unsigned n_sms,
     return;
   }
 
-  file << "cycle,sm_id,warp_id,lane_id,op,space,address,l1_status,pc";
+  file << "cycle,sm_id,warp_id,lane_id,op,space,address,l1_status,pc,is_pf,pf_kind";
   if (s_print_bw) {
     file << ",hbm_bw_GBps,hbm_occupancy";
   }
@@ -163,6 +163,16 @@ void l1_tracer::emit(unsigned sid, unsigned wid, const mem_fetch *mf,
     } else {
       oss << "NA";
     }
+    // Prefetch tagging columns
+    {
+      bool is_pf = mf->is_ima_prefetch();
+      oss << ',' << (is_pf ? 1 : 0) << ',';
+      switch (mf->get_ima_kind()) {
+        case IMA_PREFETCH_INDEX: oss << "INDEX"; break;
+        case IMA_PREFETCH_DATA:  oss << "DATA";  break;
+        default:                 oss << "NONE";  break;
+      }
+    }
     if (s_print_bw) {
       oss << ',' << bw_str << ',' << occ_str;
     }
@@ -179,6 +189,72 @@ void l1_tracer::emit(unsigned sid, unsigned wid, const mem_fetch *mf,
           << sfu_util_str;
       oss << ',' << active_tensor_lanes << ',' << total_tensor_lanes << ','
           << tensor_util_str;
+    }
+    oss << '\n';
+  }
+
+  std::string &buffer = s_buffers[sid];
+  buffer.append(oss.str());
+  if (buffer.size() >= s_flush_threshold) {
+    flush_sid(sid);
+  }
+}
+
+void l1_tracer::emit_fill(unsigned sid, unsigned wid, const mem_fetch *mf,
+                          unsigned long long cycle, unsigned line_sz) {
+  if (!s_enabled || !mf) return;
+  if (sid >= s_buffers.size()) return;
+  const std::vector<std::pair<unsigned, addr_t>> &lanes = mf->dbg_lanes();
+  if (lanes.empty()) return;
+
+  const char *op = mf->dbg_is_store() ? "ST" : "LD";
+  std::string space = addr_space_from_inst(mf->get_inst());
+  if (space.empty()) space = "NA";
+
+  std::ostringstream oss;
+  address_type pc = mf->get_pc();
+  bool has_pc = pc != static_cast<address_type>(-1);
+
+  std::unordered_set<addr_t> seen_lines;
+  seen_lines.reserve(lanes.size());
+
+  for (const auto &entry : lanes) {
+    addr_t line_addr = entry.second;
+    if (line_sz) {
+      line_addr = entry.second &
+                  ~static_cast<addr_t>(static_cast<addr_t>(line_sz) - 1);
+    }
+    if (!seen_lines.insert(line_addr).second) continue;
+
+    oss << cycle << ',' << sid << ',' << wid << ',' << entry.first << ',' << op
+        << ',' << space << ',';
+    oss << "0x" << std::hex << entry.second << std::dec << ',' << "FILL"
+        << ',';
+    if (has_pc) {
+      oss << "0x" << std::hex << pc << std::dec;
+    } else {
+      oss << "NA";
+    }
+    // Prefetch tagging columns
+    {
+      bool is_pf = mf->is_ima_prefetch();
+      oss << ',' << (is_pf ? 1 : 0) << ',';
+      switch (mf->get_ima_kind()) {
+        case IMA_PREFETCH_INDEX: oss << "INDEX"; break;
+        case IMA_PREFETCH_DATA:  oss << "DATA";  break;
+        default:                 oss << "NONE";  break;
+      }
+    }
+    if (s_print_bw) {
+      oss << ",0.000000,0.000000";
+    }
+    if (s_print_compute) {
+      oss << ",0,0,0.000000";
+      oss << ",0,0,0.000000";
+      oss << ",0,0,0.000000";
+      oss << ",0,0,0.000000";
+      oss << ",0,0,0.000000";
+      oss << ",0,0,0.000000";
     }
     oss << '\n';
   }

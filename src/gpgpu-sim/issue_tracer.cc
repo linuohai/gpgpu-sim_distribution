@@ -35,7 +35,7 @@ void issue_tracer::init(bool enable, const char *path, unsigned n_sms) {
     return;
   }
 
-  file << "cycle,sm,scheduler,warp,warp_group,event,pc,mask,OP,Space,One_Reason";
+  file << "cycle,sm,scheduler,warp,warp_group,cta_uid,event,pc,mask,OP,Space,One_Reason";
   file << ",MEM_WAIT,REG_WAIT,IBUFFER_EMPTY,WAIT_CTA_BARRIER,WAIT_MEMBAR";
   file << ",WAIT_ATOMIC,WAIT_LDGSTS,WAIT_DONE,CONTROL_HAZARD,PIPE_BUSY";
   file << ",DUAL_ISSUE_RESTRICT,Issue_Sector_Addresses";
@@ -43,7 +43,8 @@ void issue_tracer::init(bool enable, const char *path, unsigned n_sms) {
 }
 
 void issue_tracer::emit_issue(unsigned sid, unsigned wid, unsigned sch_id,
-                              int warp_group, unsigned long long cycle,
+                              int warp_group, int cta_uid,
+                              unsigned long long cycle,
                               const active_mask_t &mask,
                               const std::string &opcode,
                               const std::string &space, address_type pc,
@@ -65,6 +66,11 @@ void issue_tracer::emit_issue(unsigned sid, unsigned wid, unsigned sch_id,
     oss << "NA";
   else
     oss << warp_group;
+  oss << ',';
+  if (cta_uid < 0)
+    oss << "NA";
+  else
+    oss << cta_uid;
   oss << ",ISSUE," << hexify(pc) << ',' << mask_to_hex(mask) << ','
       << escape(opcode_field)
       << ',' << escape(space_field)
@@ -75,7 +81,7 @@ void issue_tracer::emit_issue(unsigned sid, unsigned wid, unsigned sch_id,
 }
 
 void issue_tracer::emit_stall(unsigned sid, int sample_warp, int warp_group,
-                              unsigned long long cycle,
+                              int cta_uid, unsigned long long cycle,
                               const active_mask_t *mask,
                               const std::string &opcode,
                               const std::string &space, address_type pc,
@@ -96,6 +102,11 @@ void issue_tracer::emit_stall(unsigned sid, int sample_warp, int warp_group,
     oss << "NA";
   else
     oss << warp_group;
+  oss << ',';
+  if (cta_uid < 0)
+    oss << "NA";
+  else
+    oss << cta_uid;
   oss << ",STALL,";
   if (pc == static_cast<address_type>(-1))
     oss << "NA";
