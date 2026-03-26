@@ -102,4 +102,8 @@ class baseline_snake_prefetcher_t : public baseline_prefetcher_t {
   // Per-warp last-PC tracker for IT stride detection
   std::vector<warp_pc_tracker_t> m_warp_trackers;  // indexed by warp_id
   static constexpr unsigned kMaxWarps = 64;
+
+  // Throttle state (Snake paper §3.3)
+  unsigned long long m_throttle_until = 0;
+  static constexpr unsigned kThrottlePauseCycles = 50;
 };

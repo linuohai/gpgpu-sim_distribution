@@ -25,6 +25,7 @@ void baseline_snake_prefetcher_t::on_kernel_launch() {
   if (!m_tt.empty()) m_tt.back().next_tt_idx = 0xFFFF;
   m_tt_free_head = m_tt.empty() ? 0xFFFF : 0;
   for (auto &w : m_warp_trackers) w = warp_pc_tracker_t();
+  m_throttle_until = 0;
 }
 
 void baseline_snake_prefetcher_t::on_warp_exit(unsigned warp_id) {
@@ -187,12 +188,25 @@ void baseline_snake_prefetcher_t::try_extend_chain(
 void baseline_snake_prefetcher_t::generate_prefetches(
     const ht_entry_t &entry, new_addr_type addr, unsigned warp_id,
     unsigned long long cycle) {
-  // 50% capacity limit (Snake paper §3.2): stop issuing prefetches when
-  // prefetch lines occupy >= half of the L1D cache.
+  // Throttle: pause for kThrottlePauseCycles after hitting limit
+  if (cycle < m_throttle_until) return;
+
   if (m_l1d_cache) {
+    // Free space throttle (paper §3.3 condition 1)
     unsigned pf_count = m_l1d_cache->count_snake_prefetch_lines();
     unsigned total = m_l1d_cache->get_total_lines();
-    if (pf_count >= total / 2) return;
+    if (pf_count >= total / 2) {
+      m_throttle_until = cycle + kThrottlePauseCycles;
+      return;
+    }
+
+    // Bandwidth throttle (paper §3.3 condition 2, simplified via MSHR)
+    unsigned mshr_used = m_l1d_cache->get_mshr_used();
+    unsigned mshr_total = m_l1d_cache->get_mshr_entries();
+    if (mshr_total > 0 && (mshr_used * 100 / mshr_total) > 70) {
+      m_throttle_until = cycle + kThrottlePauseCycles;
+      return;
+    }
   }
 
   // 1. IaW prefetch
