@@ -121,32 +121,36 @@ void baseline_snake_prefetcher_t::update_it_stride(
       static_cast<int64_t>(cur_addr) - static_cast<int64_t>(prev_addr);
   if (it_stride == 0) return;
 
-  if (!prev_entry.it_stride_valid) {
-    // First observation: record the (PC2, stride) pair
-    prev_entry.it_next_pc = cur_pc;
-    prev_entry.it_stride = it_stride;
-    prev_entry.it_observation_count = 1;
-    // Don't mark valid yet — need confirmation
-  } else if (prev_entry.it_next_pc == cur_pc &&
-             prev_entry.it_stride == it_stride) {
-    // Same pair, same stride → confirm
+  if (prev_entry.it_next_pc == cur_pc && prev_entry.it_stride == it_stride) {
+    // Same (PC2, stride) pair observed again → increment confirmation
     prev_entry.it_observation_count++;
   } else if (prev_entry.it_next_pc == cur_pc &&
              prev_entry.it_stride != it_stride) {
-    // Same PC pair but different stride → update stride, reset count
+    // Same PC2 but stride changed → update stride, keep 1 observation
     prev_entry.it_stride = it_stride;
     prev_entry.it_observation_count = 1;
-  } else {
-    // Different PC2 → replace if fewer observations
-    // (more frequent PC2 wins)
+    prev_entry.it_stride_valid = false;
+  } else if (prev_entry.it_observation_count == 0 ||
+             prev_entry.it_next_pc == 0) {
+    // No prior observation → first record
     prev_entry.it_next_pc = cur_pc;
     prev_entry.it_stride = it_stride;
     prev_entry.it_observation_count = 1;
     prev_entry.it_stride_valid = false;
+  } else {
+    // Different PC2 → replace only if current pair has weak evidence
+    if (prev_entry.it_observation_count <= 1) {
+      prev_entry.it_next_pc = cur_pc;
+      prev_entry.it_stride = it_stride;
+      prev_entry.it_observation_count = 1;
+      prev_entry.it_stride_valid = false;
+    }
+    // Otherwise keep the stronger existing pair
   }
 
-  // Confirm after 2 consistent observations (from any warp)
-  if (prev_entry.it_observation_count >= 2) {
+  // Confirm after 2 consistent observations
+  if (!prev_entry.it_stride_valid &&
+      prev_entry.it_observation_count >= 2) {
     prev_entry.it_stride_valid = true;
   }
 }
@@ -257,7 +261,10 @@ void baseline_snake_prefetcher_t::on_demand_load(
   update_iaw_stride(entry, warp_id, addr);
   update_iew_stride(entry, warp_id, addr);
 
-  // --- Prefetch generation (only if trained) ---
+  // --- Prefetch generation ---
+  // Gate on training_done (3 warps confirmed) to avoid noisy early prefetches.
+  // Each stride type additionally checks its own confirmation flag inside
+  // generate_prefetches.
   if (entry.training_done) {
     generate_prefetches(entry, addr, warp_id, cycle);
   }
