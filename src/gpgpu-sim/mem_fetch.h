@@ -42,6 +42,12 @@ enum mf_type {
   WRITE_ACK
 };
 
+enum ima_prefetch_kind_t {
+  IMA_PREFETCH_NONE = 0,
+  IMA_PREFETCH_INDEX = 1,
+  IMA_PREFETCH_DATA = 2,
+};
+
 #define MF_TUP_BEGIN(X) enum X {
 #define MF_TUP(X) X
 #define MF_TUP_END(X) \
@@ -113,6 +119,16 @@ class mem_fetch {
   bool isconst() const;
   enum mf_type get_type() const { return m_type; }
   bool isatomic() const;
+  void set_ima_metadata(enum ima_prefetch_kind_t kind, unsigned prb_entry_id) {
+    m_ima_kind = kind;
+    m_ima_prb_entry_id = prb_entry_id;
+  }
+  enum ima_prefetch_kind_t get_ima_kind() const { return m_ima_kind; }
+  unsigned get_ima_prb_entry_id() const { return m_ima_prb_entry_id; }
+  bool is_ima_prefetch() const { return m_ima_kind != IMA_PREFETCH_NONE; }
+
+  void set_snake_prefetch(bool v) { m_is_snake_prefetch = v; }
+  bool is_snake_prefetch() const { return m_is_snake_prefetch; }
 
   void set_return_timestamp(unsigned t) { m_timestamp2 = t; }
   void set_icnt_receive_time(unsigned t) { m_icnt_receive_time = t; }
@@ -195,6 +211,9 @@ class mem_fetch {
   std::vector<std::pair<unsigned, addr_t>> m_dbg_lanes;
   bool m_dbg_has_op;
   bool m_dbg_is_store;
+  enum ima_prefetch_kind_t m_ima_kind;
+  unsigned m_ima_prb_entry_id;
+  bool m_is_snake_prefetch = false;
 };
 
 #endif

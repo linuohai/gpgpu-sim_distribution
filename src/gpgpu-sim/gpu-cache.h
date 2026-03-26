@@ -167,6 +167,7 @@ struct cache_block_t {
 
   new_addr_type m_tag;
   new_addr_type m_block_addr;
+  bool m_is_snake_prefetch = false;
 };
 
 struct line_cache_block : public cache_block_t {
@@ -1051,6 +1052,8 @@ class mshr_table {
   // Returns true if there is a pending read after write
   bool is_read_after_write_pending(new_addr_type block_addr);
 
+  unsigned get_count() const { return static_cast<unsigned>(m_data.size()); }
+
   void check_mshr_parameters(unsigned num_entries, unsigned max_merged) {
     assert(m_num_entries == num_entries &&
            "Change of MSHR parameters between kernels is not allowed");
@@ -1370,6 +1373,11 @@ class baseline_cache : public cache_t {
   // filling the cache on cudamemcopies. We don't care about anything other than
   // L2 state after the memcopy - so just force the tag array to act as though
   // something is read or written without doing anything else.
+  unsigned count_snake_prefetch_lines() const;
+  unsigned get_total_lines() const { return m_config.get_num_lines(); }
+  unsigned get_mshr_used() const { return m_mshrs.get_count(); }
+  unsigned get_mshr_entries() const { return m_config.m_mshr_entries; }
+
   void force_tag_access(new_addr_type addr, unsigned time,
                         mem_access_sector_mask_t mask) {
     mem_access_byte_mask_t byte_mask;

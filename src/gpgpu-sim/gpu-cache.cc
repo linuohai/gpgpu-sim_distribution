@@ -1295,6 +1295,16 @@ void baseline_cache::display_state(FILE *fp) const {
   fprintf(fp, "\n");
 }
 
+unsigned baseline_cache::count_snake_prefetch_lines() const {
+  unsigned count = 0;
+  for (unsigned i = 0; i < m_config.get_num_lines(); i++) {
+    cache_block_t *blk = m_tag_array->get_block(i);
+    if (blk->is_valid_line() && blk->m_is_snake_prefetch)
+      count++;
+  }
+  return count;
+}
+
 void baseline_cache::inc_aggregated_stats(cache_request_status status,
                                           cache_request_status cache_status,
                                           mem_fetch *mf,

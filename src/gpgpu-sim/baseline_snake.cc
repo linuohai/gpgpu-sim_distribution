@@ -6,9 +6,10 @@
 #include "shader.h"
 
 baseline_snake_prefetcher_t::baseline_snake_prefetcher_t(
-    unsigned sm_id, const baseline_snake_config_t &cfg)
+    unsigned sm_id, const baseline_snake_config_t &cfg, baseline_cache *l1d)
     : baseline_prefetcher_t(sm_id),
       m_cfg(cfg),
+      m_l1d_cache(l1d),
       m_ht(cfg.ht_size),
       m_tt(cfg.tt_size),
       m_tt_free_head(0),

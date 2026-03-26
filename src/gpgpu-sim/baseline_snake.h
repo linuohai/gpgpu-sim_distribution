@@ -5,6 +5,8 @@
 
 #include "baseline_prefetcher.h"
 
+class baseline_cache;
+
 struct baseline_snake_config_t {
   bool enable = false;
   unsigned ht_size = 128;
@@ -16,7 +18,10 @@ struct baseline_snake_config_t {
 class baseline_snake_prefetcher_t : public baseline_prefetcher_t {
  public:
   baseline_snake_prefetcher_t(unsigned sm_id,
-                              const baseline_snake_config_t &cfg);
+                              const baseline_snake_config_t &cfg,
+                              baseline_cache *l1d = nullptr);
+
+  bool is_snake() const override { return true; }
 
   void on_kernel_launch() override;
   void on_warp_exit(unsigned warp_id) override;
@@ -89,6 +94,7 @@ class baseline_snake_prefetcher_t : public baseline_prefetcher_t {
                             unsigned warp_id, unsigned long long cycle);
 
   baseline_snake_config_t m_cfg;
+  baseline_cache *m_l1d_cache;
   std::vector<ht_entry_t> m_ht;
   std::vector<tt_entry_t> m_tt;
   unsigned m_tt_free_head;  // simple free-list for TT allocation
