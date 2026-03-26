@@ -43,6 +43,8 @@
 #include <list>
 #include <map>
 #include <set>
+#include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -57,6 +59,9 @@
 #include "stack.h"
 #include "stats.h"
 #include "traffic_breakdown.h"
+#include "baseline_prefetcher.h"
+#include "ima_prefetcher.h"
+#include "grasp_prefetcher.h"
 
 #define NO_OP_FLAG 0xFF
 
@@ -84,6 +89,13 @@ enum exec_unit_type_t {
   INT = 5,
   TENSOR = 6,
   SPECIALIZED = 7
+};
+
+struct ima_prefetch_candidate_t {
+  new_addr_type idx_addr = 0;
+  new_addr_type data_addr = 0;
+  unsigned source_chain_id = (unsigned)-1;
+  std::vector<unsigned> successor_chain_ids;
 };
 
 class thread_ctx_t {
@@ -121,6 +133,7 @@ class shd_warp_t {
     assert(m_stores_outstanding == 0);
     assert(m_inst_in_pipeline == 0);
     m_imiss_pending = false;
+    m_cta_id = (unsigned)-1;
     m_warp_id = (unsigned)-1;
     m_dynamic_warp_id = (unsigned)-1;
     n_completed = m_warp_size;
@@ -150,7 +163,8 @@ class shd_warp_t {
     m_ldgdepbar_buf.clear();
   }
   void init(address_type start_pc, unsigned cta_id, unsigned wid,
-            const std::bitset<MAX_WARP_SIZE> &active, unsigned dynamic_warp_id,
+            const std::bitset<MAX_WARP_SIZE> &active,
+            unsigned dynamic_warp_id,
             unsigned long long streamID) {
     m_streamID = streamID;
     m_cta_id = cta_id;
@@ -214,6 +228,31 @@ class shd_warp_t {
   bool get_membar() const { return m_membar; }
   virtual address_type get_pc() const { return m_next_pc; }
   virtual kernel_info_t *get_kernel_info() const;
+  virtual std::vector<unsigned> get_ima_seed_chain_ids(address_type pc) {
+    (void)pc;
+    return std::vector<unsigned>();
+  }
+  virtual bool is_ima_data_pc(address_type pc) {
+    (void)pc;
+    return false;
+  }
+  virtual std::vector<ima_prefetch_candidate_t> lookup_ima_prefetch_candidates(
+      new_addr_type request_addr, const std::vector<unsigned> &seed_chain_ids,
+      bool exact_match_only = false) {
+    (void)request_addr;
+    (void)seed_chain_ids;
+    (void)exact_match_only;
+    return std::vector<ima_prefetch_candidate_t>();
+  }
+  virtual void record_ima_verify_predictions(
+      const std::vector<ima_prefetch_candidate_t> &cands,
+      unsigned long long issue_cycle, bool debug_enable,
+      bool dedupe_pending = true) {
+    (void)cands;
+    (void)issue_cycle;
+    (void)debug_enable;
+    (void)dedupe_pending;
+  }
   void set_next_pc(address_type pc) { m_next_pc = pc; }
 
   void store_info_of_last_inst_at_barrier(const warp_inst_t *pI) {
@@ -1455,6 +1494,12 @@ class ldst_unit : public pipelined_simd_unit {
   void get_L1C_sub_stats(struct cache_sub_stats &css) const;
   void get_L1T_sub_stats(struct cache_sub_stats &css) const;
 
+  // IMA prefetcher: drain one pending prefetch per cycle into L1D.
+  void inject_ima_prefetches(unsigned long long cycle);
+  void queue_ima_prefetch_request(new_addr_type addr, unsigned warp_id,
+                                  const std::vector<unsigned> &seed_chain_ids,
+                                  unsigned long long ready_cycle);
+
  protected:
   ldst_unit(mem_fetch_interface *icnt,
             shader_core_mem_fetch_allocator *mf_allocator,
@@ -1522,6 +1567,47 @@ class ldst_unit : public pipelined_simd_unit {
 
   std::vector<std::deque<mem_fetch *>> l1_latency_queue;
   void L1_latency_queue_cycle();
+
+  struct ima_pending_prefetch_request_t {
+    new_addr_type addr = 0;
+    unsigned warp_id = (unsigned)-1;
+    std::vector<unsigned> seed_chain_ids;
+    unsigned long long ready_cycle = 0;
+  };
+
+  struct ima_prb_entry_t {
+    bool valid = false;
+    unsigned warp_id = (unsigned)-1;
+    std::vector<ima_prefetch_candidate_t> candidates;
+  };
+
+  int alloc_ima_prb_entry(unsigned warp_id,
+                          const std::vector<ima_prefetch_candidate_t> &cands);
+  void free_ima_prb_entry(unsigned prb_entry_id);
+  void release_ima_prb_targets(unsigned prb_entry_id,
+                               unsigned long long ready_cycle,
+                               const char *reason);
+  void on_ima_prefetch_fill(mem_fetch *mf, unsigned long long fill_cycle);
+  int find_ready_ima_prefetch(unsigned long long cycle) const;
+
+  // IMA prefetcher state (legacy — used when grasp_enable=false)
+  ima_prefetcher_t *m_ima_prefetcher;          // nullptr when disabled
+  std::deque<ima_pending_prefetch_request_t>
+      m_prefetch_queue;  // pending prefetch requests
+  std::vector<ima_prb_entry_t> m_ima_prb;
+
+  // SOTA baseline prefetchers (mutually exclusive with GRASP and legacy IMA)
+  baseline_prefetcher_t *m_baseline;  // nullptr when disabled
+  unsigned m_baseline_last_demand_uid = 0;  // dedup: skip dup mem_fetch per inst
+
+  // GRASP prefetcher (replaces IMA prefetcher when grasp_enable=true)
+  grasp_prefetcher_t *m_grasp;  // nullptr when disabled
+
+ public:
+  baseline_prefetcher_t *baseline() const { return m_baseline; }
+  bool baseline_enabled() const { return m_baseline != nullptr; }
+  grasp_prefetcher_t *grasp() const { return m_grasp; }
+  bool grasp_enabled() const { return m_grasp != nullptr; }
 };
 
 enum pipeline_stage_name_t {
@@ -1674,6 +1760,44 @@ class shader_core_config : public core_config {
   char *gpgpu_shader_core_pipeline_opt;
   bool gpgpu_perfect_mem;
   bool gpgpu_perfect_l1d;
+  // IMA prefetcher configuration
+  bool gpgpu_ima_prefetch_enable;
+  int gpgpu_ima_prefetch_distance;    // lookahead depth (number of strides)
+  int gpgpu_ima_prefetch_confidence;  // min confidence to trigger prefetch
+  int gpgpu_ima_prefetch_ipt_size;    // IPT entries per SM
+  char *gpgpu_ima_prefetch_chain_csv;
+  bool gpgpu_ima_prefetch_debug;
+  bool gpgpu_ima_validate_all_idx_pc;
+  bool baseline_intra_enable;
+  bool baseline_inter_enable;
+  bool baseline_snake_enable;
+  bool baseline_spare_reg_enable;
+  unsigned baseline_stride_table_size;
+  unsigned baseline_stride_assoc;
+  unsigned baseline_stride_conf_threshold;
+  unsigned baseline_stride_degree;
+  unsigned baseline_snake_ht_size;
+  unsigned baseline_snake_tt_size;
+  unsigned baseline_snake_training_warps;
+  unsigned baseline_snake_max_chain;
+  unsigned baseline_snake_decoupled;
+  unsigned baseline_snake_decoupled_size;
+  unsigned baseline_spare_reg_value_tags;
+  unsigned baseline_spare_reg_load_pairs;
+  unsigned baseline_spare_reg_training_iter;
+  unsigned baseline_spare_reg_use_l1d;
+  unsigned baseline_spare_reg_distance;
+  // GRASP prefetcher configuration
+  bool grasp_enable;
+  bool grasp_debug;
+  unsigned grasp_cd_fifo_depth;
+  unsigned grasp_ct_size;
+  unsigned grasp_tt_size;
+  unsigned grasp_ist_ipt_size;
+  unsigned grasp_ist_distance;
+  unsigned grasp_ist_confidence;
+  unsigned grasp_prb_capacity;
+  unsigned grasp_tc_mshr_threshold;
   bool gpgpu_clock_gated_reg_file;
   bool gpgpu_clock_gated_lanes;
   enum divergence_support_t model;
@@ -2175,6 +2299,14 @@ class shader_core_ctx : public core_t {
   }
   kernel_info_t *get_kernel() { return m_kernel; }
   unsigned get_sid() const { return m_sid; }
+  shd_warp_t *get_warp_ptr(unsigned warp_id) {
+    if (warp_id >= m_warp.size()) return NULL;
+    return m_warp[warp_id];
+  }
+  unsigned get_warp_cta_uid(unsigned warp_id) const {
+    if (warp_id >= m_warp_cta_uid.size()) return (unsigned)-1;
+    return m_warp_cta_uid[warp_id];
+  }
 
   // used by functional simulation:
   // modifiers
@@ -2218,6 +2350,7 @@ class shader_core_ctx : public core_t {
   }
   void print_cache_stats(FILE *fp, unsigned &dl1_accesses,
                          unsigned &dl1_misses);
+  void print_grasp_stats(FILE *fp) const;
 
   void get_cache_stats(cache_stats &cs);
   void get_L1I_sub_stats(struct cache_sub_stats &css) const;
@@ -2633,6 +2766,7 @@ class shader_core_ctx : public core_t {
 
   // decode/dispatch
   std::vector<shd_warp_t *> m_warp;  // per warp information array
+  std::vector<unsigned> m_warp_cta_uid;
   barrier_set_t m_barriers;
   ifetch_buffer_t m_inst_fetch_buffer;
   std::vector<register_set> m_pipeline_reg;
@@ -2770,6 +2904,7 @@ class simt_core_cluster {
   void display_pipeline(unsigned sid, FILE *fout, int print_mem, int mask);
   void print_cache_stats(FILE *fp, unsigned &dl1_accesses,
                          unsigned &dl1_misses) const;
+  void print_grasp_stats(FILE *fp) const;
 
   void get_cache_stats(cache_stats &cs) const;
   void get_L1I_sub_stats(struct cache_sub_stats &css) const;

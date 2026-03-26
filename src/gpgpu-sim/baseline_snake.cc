@@ -92,6 +92,11 @@ void baseline_snake_prefetcher_t::update_iaw_stride(ht_entry_t &entry,
 void baseline_snake_prefetcher_t::update_iew_stride(ht_entry_t &entry,
                                                      unsigned warp_id,
                                                      new_addr_type addr) {
+  // IeW stride: raw delta between consecutive different-warp arrivals.
+  // With GTO scheduling, warps from the same CTA tend to arrive
+  // consecutively, so the raw delta is constant within a CTA.
+  // Cross-CTA arrivals produce different deltas that reset confidence,
+  // which is correct behavior (prevents cross-CTA false strides).
   if (entry.iew_last_warp_id != static_cast<unsigned>(-1) &&
       entry.iew_last_warp_id != warp_id) {
     int64_t delta = static_cast<int64_t>(addr) -
