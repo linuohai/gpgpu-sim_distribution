@@ -193,6 +193,7 @@ struct line_cache_block : public cache_block_t {
     m_set_modified_on_fill = false;
     m_set_readable_on_fill = false;
     m_set_byte_mask_on_fill = false;
+    m_is_snake_prefetch = false;  // reset on allocation
   }
   virtual void fill(unsigned time, mem_access_sector_mask_t sector_mask,
                     mem_access_byte_mask_t byte_mask) {
@@ -301,6 +302,7 @@ struct sector_cache_block : public cache_block_t {
     m_line_last_access_time = 0;
     m_line_fill_time = 0;
     m_dirty_byte_mask.reset();
+    m_is_snake_prefetch = false;  // reset on allocation
   }
 
   virtual void allocate(new_addr_type tag, new_addr_type block_addr,

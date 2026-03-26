@@ -187,6 +187,14 @@ void baseline_snake_prefetcher_t::try_extend_chain(
 void baseline_snake_prefetcher_t::generate_prefetches(
     const ht_entry_t &entry, new_addr_type addr, unsigned warp_id,
     unsigned long long cycle) {
+  // 50% capacity limit (Snake paper §3.2): stop issuing prefetches when
+  // prefetch lines occupy >= half of the L1D cache.
+  if (m_l1d_cache) {
+    unsigned pf_count = m_l1d_cache->count_snake_prefetch_lines();
+    unsigned total = m_l1d_cache->get_total_lines();
+    if (pf_count >= total / 2) return;
+  }
+
   // 1. IaW prefetch
   if (entry.iaw_confirmed && entry.iaw_stride != 0) {
     new_addr_type pf_addr = static_cast<new_addr_type>(

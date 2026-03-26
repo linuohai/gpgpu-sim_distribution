@@ -327,6 +327,23 @@ enum cache_request_status tag_array::probe(new_addr_type addr, unsigned &idx,
     idx = invalid_line;
   } else if (valid_line != (unsigned)-1) {
     idx = valid_line;
+    // Snake decoupled storage: prefer evicting a prefetch line over a normal
+    // line within the same set (only when no invalid lines are available).
+    if (!m_lines[valid_line]->m_is_snake_prefetch) {
+      unsigned set_start = set_index * m_config.m_assoc;
+      for (unsigned way = 0; way < m_config.m_assoc; way++) {
+        unsigned check_idx = set_start + way;
+        if (check_idx != valid_line && !m_lines[check_idx]->is_reserved_line() &&
+            m_lines[check_idx]->is_valid_line() &&
+            m_lines[check_idx]->m_is_snake_prefetch &&
+            (!m_lines[check_idx]->is_modified_line() ||
+             ((float)m_dirty / (m_config.m_nset * m_config.m_assoc)) * 100 >=
+                 m_config.m_wr_percent)) {
+          idx = check_idx;
+          break;
+        }
+      }
+    }
   } else
     abort();  // if an unreserved block exists, it is either invalid or
               // replaceable
@@ -1254,10 +1271,27 @@ void baseline_cache::fill(mem_fetch *mf, unsigned time) {
   assert(e->second.m_valid);
   mf->set_data_size(e->second.m_data_size);
   mf->set_addr(e->second.m_addr);
-  if (m_config.m_alloc_policy == ON_MISS)
+  if (m_config.m_alloc_policy == ON_MISS) {
     m_tag_array->fill(e->second.m_cache_index, time, mf);
-  else if (m_config.m_alloc_policy == ON_FILL) {
+    // Snake decoupled storage: mark prefetch-filled lines
+    if (mf->is_snake_prefetch()) {
+      cache_block_t *blk = m_tag_array->get_block(e->second.m_cache_index);
+      if (blk) blk->m_is_snake_prefetch = true;
+    }
+  } else if (m_config.m_alloc_policy == ON_FILL) {
     m_tag_array->fill(e->second.m_block_addr, time, mf, mf->is_write());
+    // Snake decoupled storage: mark prefetch-filled lines (ON_FILL path)
+    if (mf->is_snake_prefetch()) {
+      unsigned pf_idx;
+      mem_access_sector_mask_t pf_mask = mf->get_access_sector_mask();
+      enum cache_request_status pf_st =
+          m_tag_array->probe(e->second.m_block_addr, pf_idx, pf_mask,
+                             mf->is_write(), true);
+      if (pf_st == HIT || pf_st == HIT_RESERVED) {
+        cache_block_t *blk = m_tag_array->get_block(pf_idx);
+        if (blk) blk->m_is_snake_prefetch = true;
+      }
+    }
   } else
     abort();
   bool has_atomic = false;
@@ -2004,6 +2038,14 @@ enum cache_request_status data_cache::access(new_addr_type addr, mem_fetch *mf,
       m_tag_array->probe(block_addr, cache_index, mf, mf->is_write(), true);
   if (probe_status) {
     *probe_status = probe_status_value;
+  }
+  // Snake decoupled storage: promote prefetch line on demand hit
+  if ((probe_status_value == HIT || probe_status_value == HIT_RESERVED) &&
+      !mf->is_snake_prefetch()) {
+    cache_block_t *blk = m_tag_array->get_block(cache_index);
+    if (blk && blk->m_is_snake_prefetch) {
+      blk->m_is_snake_prefetch = false;  // promote to normal
+    }
   }
   enum cache_request_status access_status =
       process_tag_probe(wr, probe_status_value, addr, cache_index, mf, time,
