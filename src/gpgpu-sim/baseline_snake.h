@@ -31,19 +31,17 @@ class baseline_snake_prefetcher_t : public baseline_prefetcher_t {
   void print_stats(FILE *fp) const override;
 
  private:
-  // --- Tail Table: stores IT stride for each hop in a chain ---
-  struct tt_entry_t {
-    bool valid = false;
-    int64_t it_stride = 0;       // inter-thread stride (PC_n -> PC_{n+1})
-    unsigned next_tt_idx = 0xFFFF;  // linked-list pointer (0xFFFF = end)
-  };
-
-  // --- Head Table: one entry per chain-head PC ---
+  // --- HT Entry: one per load PC (matches paper's Tail Table) ---
+  // Paper §3.1: indexed by PC_ld, stores PC1, PC2, strides, warpID vector
   struct ht_entry_t {
     bool valid = false;
-    new_addr_type pc = 0;           // chain head PC
-    unsigned chain_length = 0;      // number of hops (TT entries)
-    unsigned tt_head_idx = 0xFFFF;  // first TT entry index
+    new_addr_type pc = 0;           // this PC (PC1 in paper)
+
+    // Inter-thread chain: PC1 → PC2 with IT stride
+    new_addr_type it_next_pc = 0;   // PC2: the consecutive PC after this one
+    int64_t it_stride = 0;          // addr(PC2) - addr(PC1)
+    bool it_stride_valid = false;   // stride confirmed by ≥2 observations
+    unsigned it_observation_count = 0;
 
     // IaW stride (intra-warp): same warp, same PC, across iterations
     new_addr_type iaw_last_addr = 0;
@@ -57,18 +55,13 @@ class baseline_snake_prefetcher_t : public baseline_prefetcher_t {
     bool iew_confirmed = false;
     unsigned iew_last_warp_id = static_cast<unsigned>(-1);
 
-    // Training state
-    uint64_t warp_confirmed_mask = 0;  // 64-bit bitmap, bit i = warp i confirmed
+    // Training state (paper: warpID vector + T1/T2)
+    uint64_t warp_confirmed_mask = 0;
     bool training_done = false;
 
     unsigned training_warp_count() const {
         return static_cast<unsigned>(__builtin_popcountll(warp_confirmed_mask));
     }
-
-    // IT chain training: track last PC's addr per warp for IT stride
-    new_addr_type last_it_addr = 0;
-    new_addr_type last_it_pc = 0;
-    bool last_it_valid = false;
 
     unsigned long long last_access_cycle = 0;
   };
@@ -82,22 +75,18 @@ class baseline_snake_prefetcher_t : public baseline_prefetcher_t {
 
   int find_ht_entry(new_addr_type pc) const;
   int alloc_ht_entry(new_addr_type pc, unsigned long long cycle);
-  int alloc_tt_entry();
   void update_iaw_stride(ht_entry_t &entry, unsigned warp_id,
                           new_addr_type addr);
   void update_iew_stride(ht_entry_t &entry, unsigned warp_id,
                           new_addr_type addr);
-  void try_extend_chain(ht_entry_t &head, new_addr_type prev_pc,
-                         new_addr_type prev_addr, new_addr_type cur_pc,
-                         new_addr_type cur_addr);
+  void update_it_stride(ht_entry_t &prev_entry, new_addr_type prev_addr,
+                         new_addr_type cur_pc, new_addr_type cur_addr);
   void generate_prefetches(const ht_entry_t &entry, new_addr_type addr,
                             unsigned warp_id, unsigned long long cycle);
 
   baseline_snake_config_t m_cfg;
   baseline_cache *m_l1d_cache;
   std::vector<ht_entry_t> m_ht;
-  std::vector<tt_entry_t> m_tt;
-  unsigned m_tt_free_head;  // simple free-list for TT allocation
 
   // Per-warp last-PC tracker for IT stride detection
   std::vector<warp_pc_tracker_t> m_warp_trackers;  // indexed by warp_id
