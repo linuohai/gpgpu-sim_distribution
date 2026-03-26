@@ -12,7 +12,7 @@ struct baseline_snake_config_t {
   unsigned ht_size = 128;
   unsigned tt_size = 256;
   unsigned training_warps = 3;
-  unsigned max_chain_length = 8;
+  unsigned max_chain_length = 2;  // paper depth controlled by throttle; 2 = conservative
 };
 
 class baseline_snake_prefetcher_t : public baseline_prefetcher_t {
@@ -25,6 +25,12 @@ class baseline_snake_prefetcher_t : public baseline_prefetcher_t {
 
   void on_kernel_launch() override;
   void on_warp_exit(unsigned warp_id) override;
+  void on_instruction_issue(unsigned warp_id, const warp_inst_t &inst,
+                            const std::string &sass_opcode,
+                            unsigned long long cycle) override;
+  void on_instruction_issue_with_cta(unsigned warp_id, unsigned cta_id,
+                                      const warp_inst_t &inst,
+                                      unsigned long long cycle);
   void on_demand_load(unsigned warp_id, new_addr_type pc, new_addr_type addr,
                       unsigned long long cycle, int cache_status,
                       shd_warp_t *warp) override;
@@ -49,11 +55,12 @@ class baseline_snake_prefetcher_t : public baseline_prefetcher_t {
     bool iaw_confirmed = false;
     unsigned iaw_last_warp_id = static_cast<unsigned>(-1);
 
-    // IeW stride (inter-warp): different warps, same PC
+    // IeW stride (inter-warp): different warps within same CTA, same PC
     new_addr_type iew_last_addr = 0;
     int64_t iew_stride = 0;
     bool iew_confirmed = false;
     unsigned iew_last_warp_id = static_cast<unsigned>(-1);
+    unsigned iew_last_cta_id = static_cast<unsigned>(-1);
 
     // Training state (paper: warpID vector + T1/T2)
     uint64_t warp_confirmed_mask = 0;
@@ -78,7 +85,7 @@ class baseline_snake_prefetcher_t : public baseline_prefetcher_t {
   void update_iaw_stride(ht_entry_t &entry, unsigned warp_id,
                           new_addr_type addr);
   void update_iew_stride(ht_entry_t &entry, unsigned warp_id,
-                          new_addr_type addr);
+                          unsigned cta_id, new_addr_type addr);
   void update_it_stride(ht_entry_t &prev_entry, new_addr_type prev_addr,
                          new_addr_type cur_pc, new_addr_type cur_addr);
   void generate_prefetches(const ht_entry_t &entry, new_addr_type addr,

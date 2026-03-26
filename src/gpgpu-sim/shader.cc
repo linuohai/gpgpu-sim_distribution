@@ -1684,9 +1684,18 @@ void shader_core_ctx::issue_warp(register_set &pipe_reg_set,
   } else if (m_ldst_unit->baseline_enabled()) {
     const warp_inst_t &inst = **pipe_reg;
     const std::string &sass_opcode = next_inst->get_sass_opcode();
-    m_ldst_unit->baseline()->on_instruction_issue(
-        warp_id, inst, sass_opcode,
-        m_gpu->gpu_tot_sim_cycle + m_gpu->gpu_sim_cycle);
+    // Pass CTA ID for IeW CTA-filtering (Snake needs same-CTA warps)
+    if (m_ldst_unit->baseline()->is_snake()) {
+      unsigned cta_id = m_warp[warp_id]->get_cta_id();
+      static_cast<baseline_snake_prefetcher_t *>(m_ldst_unit->baseline())
+          ->on_instruction_issue_with_cta(
+              warp_id, cta_id, inst,
+              m_gpu->gpu_tot_sim_cycle + m_gpu->gpu_sim_cycle);
+    } else {
+      m_ldst_unit->baseline()->on_instruction_issue(
+          warp_id, inst, sass_opcode,
+          m_gpu->gpu_tot_sim_cycle + m_gpu->gpu_sim_cycle);
+    }
   }
 
   if (issue_tracer::enabled() && m_gpu->issue_trace_enabled()) {
