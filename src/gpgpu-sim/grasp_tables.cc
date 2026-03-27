@@ -76,8 +76,6 @@ int grasp_chain_table_t::insert(new_addr_type index_pc, new_addr_type data_pc,
     e.stride_obs[i] = ct_entry_t::stride_obs_t();
   e.num_stride_obs = 0;
   e.last_access_time = 0;
-  e.last_pf_warp_id = (unsigned)-1;
-  e.last_pf_inst_uid = 0;
   update_peak_occupancy();
   return idx;
 }
@@ -164,6 +162,13 @@ bool grasp_chain_table_t::all_stride_valid() const {
   return has_valid;  // false if table is empty
 }
 
+bool grasp_chain_table_t::is_full() const {
+  for (const auto &e : m_entries) {
+    if (!e.valid) return false;
+  }
+  return !m_entries.empty();
+}
+
 void grasp_chain_table_t::reset() {
   for (auto &e : m_entries) {
     e.valid = false;
@@ -179,8 +184,6 @@ void grasp_chain_table_t::reset() {
       e.stride_obs[j] = ct_entry_t::stride_obs_t();
     e.num_stride_obs = 0;
     e.last_access_time = 0;
-    e.last_pf_warp_id = (unsigned)-1;
-    e.last_pf_inst_uid = 0;
   }
 }
 
@@ -202,8 +205,6 @@ void grasp_chain_table_t::reset_tracking() {
       e.stride_obs[j] = ct_entry_t::stride_obs_t();
     e.num_stride_obs = 0;
     e.last_access_time = 0;
-    e.last_pf_warp_id = (unsigned)-1;
-    e.last_pf_inst_uid = 0;
   }
 }
 

@@ -42,9 +42,7 @@ struct ct_entry_t {
   unsigned num_stride_obs = 0;
   // LRU
   unsigned long long last_access_time = 0;
-  // Prefetch generation dedup (one PF set per warp instruction)
-  unsigned last_pf_warp_id = (unsigned)-1;
-  unsigned long long last_pf_inst_uid = 0;
+  // Per-instruction dedup moved to grasp_prefetcher_t::m_demand_dedup (per-warp)
 };
 
 // ============================================================================
@@ -84,6 +82,8 @@ class grasp_chain_table_t {
 
   // All valid entries have stride_valid? (for CD freeze check)
   bool all_stride_valid() const;
+  // No invalid (empty) slot remaining?
+  bool is_full() const;
 
   // Kernel launch: clear all
   void reset();

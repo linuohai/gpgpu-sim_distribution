@@ -206,7 +206,8 @@ grasp_prefetcher_t::grasp_prefetcher_t(unsigned sm_id,
       m_ct(cfg.ct_size),
       m_tt(cfg.tt_size),
       m_ist(sm_id, cfg.ist_ipt_size, cfg.ist_distance, cfg.ist_confidence),
-      m_prb(cfg.prb_capacity) {}
+      m_prb(cfg.prb_capacity),
+      m_demand_dedup(64) {}  // 64 warps per SM max
 
 grasp_prefetcher_t::~grasp_prefetcher_t() = default;
 
@@ -235,6 +236,7 @@ void grasp_prefetcher_t::on_kernel_launch(const void *kernel_entry) {
   m_ist.reset();
   m_prb.reset();
   m_prefetch_queue.clear();
+  for (auto &dd : m_demand_dedup) dd = warp_dedup_t();
   ++m_stats.kernel_launches;
 }
 
@@ -263,10 +265,25 @@ void grasp_prefetcher_t::on_instruction_issue(unsigned warp_id,
     else break;
   }
 
+  // Extract first active lane address (for stride seed at CT_INSERT)
+  new_addr_type first_lane_addr = 0;
+  unsigned first_lane_id = 0;
+  if (!inst.empty() && inst.is_load()) {
+    for (unsigned l = 0; l < inst.warp_size(); ++l) {
+      if (inst.active(l)) {
+        first_lane_addr = inst.get_addr(l);
+        first_lane_id = l;
+        break;
+      }
+    }
+  }
+
   grasp_chain_detector_t::detected_chain_t chain;
   bool detected = m_cd.on_instruction_issue(warp_id, inst.pc, inst.op,
                                              sass_opcode, dst_reg, src_regs,
-                                             num_src, cycle, &chain);
+                                             num_src, cycle,
+                                             first_lane_addr, first_lane_id,
+                                             &chain);
 
   if (detected) {
     // TT allocation (placeholder in trace-driven mode)
@@ -297,6 +314,14 @@ void grasp_prefetcher_t::on_instruction_issue(unsigned warp_id,
       ct_idx = m_ct.insert(chain.index_pc, chain.data_pc, 0 /*imad_pc*/,
                            (unsigned)tt_idx);
       m_ct.entry(ct_idx).last_access_time = cycle;
+
+      // Seed first stride observation: record the index load address from the
+      // iteration that triggered CD.  This allows stride to converge one
+      // iteration earlier (at the very next demand load for this PC).
+      if (chain.index_addr != 0) {
+        m_ct.update_stride(ct_idx, warp_id, chain.index_lane_id,
+                           chain.index_addr, cycle, nullptr);
+      }
     }
 
     if (m_cfg.debug) {
@@ -362,12 +387,33 @@ void grasp_prefetcher_t::on_demand_load(unsigned warp_id, new_addr_type pc,
     }
   }
 
-  // Trace: demand load hit CT entry
-  if (grasp_tracer::enabled()) {
-    char det[128];
-    snprintf(det, sizeof(det), "ct_idx=%d;stride_valid=%d;iter_stride=%lld",
+  // Dedup: extract inst_uid early so we can skip redundant trace + stride
+  // updates for the 2nd-4th sectors of the same warp instruction.
+  // Uses per-warp dedup vector (not per-CT-entry) to avoid cross-warp
+  // interleaving invalidating the stored (warp_id, inst_uid) pair.
+  unsigned long long inst_uid = 0;
+  if (mf) {
+    const warp_inst_t &uid_inst = mf->get_inst();
+    if (!uid_inst.empty()) inst_uid = uid_inst.get_uid();
+  }
+  bool is_first_sector = true;
+  if (inst_uid != 0 && warp_id < m_demand_dedup.size()) {
+    auto &dd = m_demand_dedup[warp_id];
+    is_first_sector = !(dd.ct_idx == ct_idx && dd.inst_uid == inst_uid);
+    if (is_first_sector) {
+      dd.ct_idx = ct_idx;
+      dd.inst_uid = inst_uid;
+    }
+  }
+
+  // Trace: demand load hit CT entry (once per instruction, not per sector)
+  if (grasp_tracer::enabled() && is_first_sector) {
+    char det[192];
+    snprintf(det, sizeof(det),
+             "ct_idx=%d;stride_valid=%d;iter_stride=%lld;sector_addr=0x%llx",
              ct_idx, cte_mut.stride_valid ? 1 : 0,
-             (long long)cte_mut.iter_stride);
+             (long long)cte_mut.iter_stride,
+             (unsigned long long)(addr & ~((new_addr_type)31)));
     grasp_tracer::emit(m_sm_id, warp_id, cycle, "DEMAND_CT_HIT",
                        (unsigned long long)pc, (unsigned long long)lane_addr,
                        det);
@@ -382,8 +428,9 @@ void grasp_prefetcher_t::on_demand_load(unsigned warp_id, new_addr_type pc,
   }
   m_ct.entry(ct_idx).last_access_time = cycle;
 
-  // Trace: stride learning step
-  if (grasp_tracer::enabled() && has_lane_addr) {
+  // Trace: stride learning step (only when update_stride actually computed a
+  // delta; skip deduped calls where stride_delta stays at 0)
+  if (grasp_tracer::enabled() && has_lane_addr && stride_delta != 0) {
     char det[128];
     snprintf(det, sizeof(det),
              "ct_idx=%d;delta=%lld;iter_stride=%lld;stride_valid=%d;lane=%u",
@@ -409,25 +456,16 @@ void grasp_prefetcher_t::on_demand_load(unsigned warp_id, new_addr_type pc,
                          (unsigned long long)pc, (unsigned long long)lane_addr,
                          det);
     }
+    // Freeze CD when all CT entries have learned strides.
+    // This prevents wasted FIFO operations and spurious CHAIN_DETECT events.
+    m_cd.check_freeze(m_ct);
   }
 
   // Generate prefetch only if CT stride is learned
   if (!cte_mut.stride_valid || cte_mut.iter_stride == 0) return;
 
-  // Dedup: only generate prefetch once per warp instruction.
-  // A warp's LDG produces multiple mem_fetches (arriving on different cycles);
-  // all share the same instruction UID. Generate on first, skip the rest.
-  unsigned long long inst_uid = 0;
-  if (mf) {
-    const warp_inst_t &dedup_inst = mf->get_inst();
-    if (!dedup_inst.empty()) inst_uid = dedup_inst.get_uid();
-  }
-  if (inst_uid != 0 &&
-      cte_mut.last_pf_warp_id == warp_id &&
-      cte_mut.last_pf_inst_uid == inst_uid)
-    return;
-  cte_mut.last_pf_warp_id = warp_id;
-  cte_mut.last_pf_inst_uid = inst_uid;
+  // Dedup: only generate prefetch once per warp instruction (first sector).
+  if (!is_first_sector) return;
 
   // Get seed chain IDs for this PC (needed for pair table lookup)
   std::vector<unsigned> seed_chain_ids;
@@ -505,30 +543,35 @@ grasp_prefetcher_t::prefetch_result_t grasp_prefetcher_t::inject_prefetch(
 
   if (!m_cfg.enable || !l1d || m_prefetch_queue.empty()) return result;
 
-  int ready_idx = find_ready_prefetch(cycle);
-  if (ready_idx < 0) {
-    result.stalled = !m_prefetch_queue.empty();
-    return result;
-  }
+  // Inject up to 4 sectors per cycle (matching L1D bank bandwidth).
+  static const unsigned MAX_INJECT_PER_CYCLE = 4;
+  for (unsigned injected = 0; injected < MAX_INJECT_PER_CYCLE; ++injected) {
+    if (m_prefetch_queue.empty()) break;
 
-  grasp_prefetch_request_t req = m_prefetch_queue[ready_idx];
-
-  // Throttle Control: suppress DATA_PF when MSHR is congested.
-  // INDEX_PF is NOT throttled (critical for pipeline correctness).
-  bool is_data_pf = req.seed_chain_ids.empty();
-  if (is_data_pf && l1d && m_cfg.tc_mshr_threshold > 0) {
-    float mshr_ratio = l1d->mshr_occupancy_ratio() * 100.0f;
-    if (mshr_ratio >= (float)m_cfg.tc_mshr_threshold) {
-      // MSHR congested: discard this DATA_PF
-      m_prefetch_queue.erase(m_prefetch_queue.begin() + ready_idx);
-      ++m_stats.throttle_suppressed;
-      return result;
+    int ready_idx = find_ready_prefetch(cycle);
+    if (ready_idx < 0) {
+      result.stalled = !m_prefetch_queue.empty();
+      break;
     }
-  }
 
-  m_prefetch_queue.erase(m_prefetch_queue.begin() + ready_idx);
+    grasp_prefetch_request_t req = m_prefetch_queue[ready_idx];
 
-  new_addr_type paddr = req.addr;
+    // Throttle Control: suppress DATA_PF when MSHR is congested.
+    // INDEX_PF is NOT throttled (critical for pipeline correctness).
+    bool is_data_pf = req.seed_chain_ids.empty();
+    if (is_data_pf && l1d && m_cfg.tc_mshr_threshold > 0) {
+      float mshr_ratio = l1d->mshr_occupancy_ratio() * 100.0f;
+      if (mshr_ratio >= (float)m_cfg.tc_mshr_threshold) {
+        // MSHR congested: discard this DATA_PF
+        m_prefetch_queue.erase(m_prefetch_queue.begin() + ready_idx);
+        ++m_stats.throttle_suppressed;
+        continue;  // try next request
+      }
+    }
+
+    m_prefetch_queue.erase(m_prefetch_queue.begin() + ready_idx);
+
+    new_addr_type paddr = req.addr;
 
   // Compute sector mask (128B cache line, 32B sector)
   const unsigned line_sz = cache_line_sz;
@@ -606,6 +649,7 @@ grasp_prefetcher_t::prefetch_result_t grasp_prefetcher_t::inject_prefetch(
                                              : (unsigned)-1);
 
   result.requests.push_back(pf_mf);
+  }  // end for (injected)
   return result;
 }
 
@@ -613,8 +657,9 @@ grasp_prefetcher_t::prefetch_result_t grasp_prefetcher_t::inject_prefetch(
 // L1 Access Result Tracking
 // ---------------------------------------------------------------------------
 
-void grasp_prefetcher_t::on_l1_access_result(mem_fetch *mf, int cache_status,
-                                              unsigned long long cycle) {
+void grasp_prefetcher_t::on_l1_access_result(
+    mem_fetch *mf, int cache_status, unsigned long long cycle,
+    enum cache_reservation_fail_reason fail_reason) {
   if (!mf->is_ima_prefetch()) return;
 
   bool is_index = (mf->get_ima_kind() == IMA_PREFETCH_INDEX);
@@ -633,18 +678,18 @@ void grasp_prefetcher_t::on_l1_access_result(mem_fetch *mf, int cache_status,
   if (cache_status == HIT) {
     emit_l1_result("L1_RESULT_HIT");
     // Data already in L1 — release targets immediately
-    if (is_index && prb_entry_id != (unsigned)-1) {
+    if (is_index && prb_entry_id != (unsigned)-1 && m_prb.get(prb_entry_id).valid) {
       release_prb_targets(prb_entry_id, cycle + 1);
       m_prb.free_entry(prb_entry_id);
       ++m_stats.index_pf_hit;
-    } else {
+    } else if (!is_index) {
       ++m_stats.data_pf_hit;
     }
     ++m_ist.stat_prefetch_filtered;
     delete mf;
   } else if (cache_status == MSHR_HIT || cache_status == HIT_RESERVED) {
     emit_l1_result("L1_RESULT_MSHR");
-    if (is_index && prb_entry_id != (unsigned)-1) {
+    if (is_index && prb_entry_id != (unsigned)-1 && m_prb.get(prb_entry_id).valid) {
       // INDEX_PF hit existing MSHR: retry after delay so fill completes
       grasp_prb_entry_t &prb_entry = m_prb.get(prb_entry_id);
       if (prb_entry.retry_count < MAX_RETRIES) {
@@ -669,12 +714,14 @@ void grasp_prefetcher_t::on_l1_access_result(mem_fetch *mf, int cache_status,
     delete mf;
   } else if (cache_status == RESERVATION_FAIL) {
     emit_l1_result("L1_RESULT_RFAIL");
-    // MSHR/miss-queue full: discard
-    if (is_index && prb_entry_id != (unsigned)-1) {
+    // Resource full: discard and record per-reason breakdown
+    if (is_index && prb_entry_id != (unsigned)-1 && m_prb.get(prb_entry_id).valid) {
       m_prb.free_entry(prb_entry_id);
       ++m_stats.index_pf_reservation_fail;
+      ++m_stats.index_pf_rfail[fail_reason];
     } else {
       ++m_stats.data_pf_reservation_fail;
+      ++m_stats.data_pf_rfail[fail_reason];
     }
     ++m_ist.stat_prefetch_filtered;
     delete mf;
@@ -700,7 +747,9 @@ void grasp_prefetcher_t::on_fill(mem_fetch *mf, unsigned long long fill_cycle) {
   if (mf->get_ima_kind() == IMA_PREFETCH_INDEX) {
     unsigned prb_entry_id = mf->get_ima_prb_entry_id();
     if (prb_entry_id == (unsigned)-1) return;
-    // C3: bounds check
+    // Guard: PRB may have been reset by kernel switch while PF was in-flight
+    const grasp_prb_entry_t &entry = m_prb.get(prb_entry_id);
+    if (!entry.valid) return;
     release_prb_targets(prb_entry_id, fill_cycle + 1);  // T2: 1-cycle ACU delay
     m_prb.free_entry(prb_entry_id);
   }
@@ -719,10 +768,26 @@ void grasp_prefetcher_t::print_stats(FILE *fp) const {
           m_stats.index_pf_issued, m_stats.index_pf_hit,
           m_stats.index_pf_miss, m_stats.index_pf_mshr_merge,
           m_stats.index_pf_reservation_fail);
+  fprintf(fp,
+          "idx_rfail(line_alloc=%llu missq=%llu mshr_entry=%llu "
+          "mshr_merge=%llu rw_pending=%llu) ",
+          m_stats.index_pf_rfail[LINE_ALLOC_FAIL],
+          m_stats.index_pf_rfail[MISS_QUEUE_FULL],
+          m_stats.index_pf_rfail[MSHR_ENRTY_FAIL],
+          m_stats.index_pf_rfail[MSHR_MERGE_ENRTY_FAIL],
+          m_stats.index_pf_rfail[MSHR_RW_PENDING]);
   fprintf(fp, "data_pf(issued=%llu hit=%llu miss=%llu mshr=%llu rfail=%llu) ",
           m_stats.data_pf_issued, m_stats.data_pf_hit,
           m_stats.data_pf_miss, m_stats.data_pf_mshr_merge,
           m_stats.data_pf_reservation_fail);
+  fprintf(fp,
+          "data_rfail(line_alloc=%llu missq=%llu mshr_entry=%llu "
+          "mshr_merge=%llu rw_pending=%llu) ",
+          m_stats.data_pf_rfail[LINE_ALLOC_FAIL],
+          m_stats.data_pf_rfail[MISS_QUEUE_FULL],
+          m_stats.data_pf_rfail[MSHR_ENRTY_FAIL],
+          m_stats.data_pf_rfail[MSHR_MERGE_ENRTY_FAIL],
+          m_stats.data_pf_rfail[MSHR_RW_PENDING]);
   fprintf(fp, "pair_table(hit=%llu miss=%llu) ", m_stats.pair_table_lookup_hit,
           m_stats.pair_table_lookup_miss);
   fprintf(fp, "queue_peak=%llu ", m_stats.queue_peak_depth);
@@ -763,6 +828,17 @@ void grasp_prefetcher_t::queue_prefetch(
     new_addr_type addr, unsigned warp_id,
     const std::vector<unsigned> &seed_chain_ids,
     unsigned long long ready_cycle) {
+  // Dedup: skip if an identical (addr, warp_id, same kind) request is already
+  // pending.  This prevents RESERVATION_FAIL retries from flooding the queue
+  // with duplicate prefetch requests.
+  bool is_index = !seed_chain_ids.empty();
+  for (const auto &existing : m_prefetch_queue) {
+    if (existing.addr == addr && existing.warp_id == warp_id &&
+        !existing.seed_chain_ids.empty() == is_index) {
+      return;  // duplicate — skip
+    }
+  }
+
   grasp_prefetch_request_t req;
   req.addr = addr;
   req.warp_id = warp_id;
@@ -787,7 +863,7 @@ int grasp_prefetcher_t::find_ready_prefetch(unsigned long long cycle) const {
 void grasp_prefetcher_t::release_prb_targets(unsigned prb_entry_id,
                                               unsigned long long ready_cycle) {
   const grasp_prb_entry_t &entry = m_prb.get(prb_entry_id);
-  assert(entry.valid);
+  if (!entry.valid) return;  // PRB was reset by kernel switch while PF was in-flight
 
   if (m_cfg.debug) {
     printf(
@@ -803,29 +879,30 @@ void grasp_prefetcher_t::release_prb_targets(unsigned prb_entry_id,
                        0, 0, det);
   }
 
-  // Coalesce DATA_PF candidates targeting the same cache line (128B aligned).
+  // Coalesce DATA_PF candidates targeting the same sector (32B aligned),
+  // matching the L1 sector size and IDX_PF aggregation granularity.
   // INDEX_PF (non-empty successors) are NOT coalesced — each triggers an
   // independent pair table lookup at the next level.
-  static const new_addr_type LINE_MASK = ~((new_addr_type)127);
-  std::vector<new_addr_type> seen_data_lines;
+  static const new_addr_type SECTOR_MASK = ~((new_addr_type)31);
+  std::vector<new_addr_type> seen_data_sectors;
   unsigned coalesced_count = 0;
 
   for (const ima_prefetch_candidate_t &cand : entry.candidates) {
+    new_addr_type sector_addr = cand.data_addr & SECTOR_MASK;
     if (cand.successor_chain_ids.empty()) {
-      // Terminal DATA_PF: coalesce by cache line
-      new_addr_type line_addr = cand.data_addr & LINE_MASK;
+      // Terminal DATA_PF: coalesce by sector
       bool dup = false;
-      for (auto la : seen_data_lines) {
-        if (la == line_addr) { dup = true; break; }
+      for (auto s : seen_data_sectors) {
+        if (s == sector_addr) { dup = true; break; }
       }
       if (dup) {
         ++coalesced_count;
         continue;
       }
-      seen_data_lines.push_back(line_addr);
+      seen_data_sectors.push_back(sector_addr);
     }
 
-    queue_prefetch(cand.data_addr, entry.warp_id, cand.successor_chain_ids,
+    queue_prefetch(sector_addr, entry.warp_id, cand.successor_chain_ids,
                    ready_cycle);
     if (m_cfg.debug) {
       printf("  target chain=%u idx=0x%llx data=0x%llx succ=%zu\n",
@@ -840,7 +917,7 @@ void grasp_prefetcher_t::release_prb_targets(unsigned prb_entry_id,
                cand.successor_chain_ids.size());
       grasp_tracer::emit(m_sm_id, entry.warp_id, ready_cycle,
                          "DATA_PF_ENQUEUE",
-                         0, (unsigned long long)cand.data_addr, det);
+                         0, (unsigned long long)sector_addr, det);
     }
   }
 

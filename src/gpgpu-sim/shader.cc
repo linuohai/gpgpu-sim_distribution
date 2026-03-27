@@ -3205,11 +3205,18 @@ void ldst_unit::L1_latency_queue_cycle() {
         unsigned long long cycle = m_core->get_gpu()->gpu_sim_cycle +
                                    m_core->get_gpu()->gpu_tot_sim_cycle;
         shd_warp_t *warp = m_core->get_warp_ptr(mf_next->get_wid());
+        // Metrics: global demand load counting (before GRASP processes it)
+        if (m_grasp && m_grasp->enabled()) {
+          ++m_grasp->stats_mut().total_demand_global_reads;
+          if (status == MISS || status == SECTOR_MISS) {
+            ++m_grasp->stats_mut().total_demand_global_misses;
+          }
+        }
         if (m_grasp) {
           // GRASP mode: delegate to grasp_prefetcher_t
           m_grasp->on_demand_load(mf_next->get_wid(), mf_next->get_pc(),
                                   mf_next->get_addr(), cycle, warp,
-                                  mf_next);
+                                  mf_next, status);
         } else if (m_config->gpgpu_ima_prefetch_enable) {
           // Legacy IMA mode
           std::vector<unsigned> seed_chain_ids;
@@ -3810,6 +3817,7 @@ ldst_unit::ldst_unit(mem_fetch_interface *icnt,
     gcfg.chain_csv = m_config->gpgpu_ima_prefetch_chain_csv;
     gcfg.tc_mshr_threshold = m_config->grasp_tc_mshr_threshold;
     m_grasp = new grasp_prefetcher_t(m_sid, gcfg);
+    m_grasp->set_l1d(m_L1D);
   } else if (m_config->gpgpu_ima_prefetch_enable && m_L1D != nullptr) {
     // Legacy IMA mode
     m_ima_prefetcher = new ima_prefetcher_t(
@@ -3845,6 +3853,7 @@ ldst_unit::ldst_unit(mem_fetch_interface *icnt,
     gcfg.chain_csv = m_config->gpgpu_ima_prefetch_chain_csv;
     gcfg.tc_mshr_threshold = m_config->grasp_tc_mshr_threshold;
     m_grasp = new grasp_prefetcher_t(m_sid, gcfg);
+    m_grasp->set_l1d(m_L1D);
   } else if (m_config->gpgpu_ima_prefetch_enable && m_L1D != nullptr) {
     m_ima_prefetcher = new ima_prefetcher_t(
         m_sid, (unsigned)m_config->gpgpu_ima_prefetch_ipt_size,
@@ -4281,7 +4290,7 @@ void ldst_unit::cycle() {
   m_L1T->cycle();
   m_L1C->cycle();
   if (m_L1D) {
-    // Drain one prefetch per cycle before the demand pipeline runs.
+    // Drain up to 4 prefetch sectors per cycle before the demand pipeline runs.
     unsigned long long cur_cycle = m_core->get_gpu()->gpu_sim_cycle +
                                    m_core->get_gpu()->gpu_tot_sim_cycle;
     if (m_grasp) {
@@ -4295,7 +4304,10 @@ void ldst_unit::cycle() {
         std::list<cache_event> events;
         enum cache_request_status status =
             m_L1D->access(pf_mf->get_addr(), pf_mf, cur_cycle, events);
-        m_grasp->on_l1_access_result(pf_mf, status, cur_cycle);
+        m_grasp->on_l1_access_result(
+            pf_mf, status, cur_cycle,
+            status == RESERVATION_FAIL ? m_L1D->last_fail_reason()
+                                       : LINE_ALLOC_FAIL);
       }
     } else {
       inject_ima_prefetches(cur_cycle);

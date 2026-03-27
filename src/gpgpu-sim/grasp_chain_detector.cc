@@ -50,12 +50,14 @@ void grasp_chain_detector_t::push(const fifo_entry_t &entry) {
 }
 
 const grasp_chain_detector_t::fifo_entry_t *
-grasp_chain_detector_t::lookup_by_reg(int reg) const {
+grasp_chain_detector_t::lookup_by_reg(int reg, unsigned warp_id) const {
   if (reg < 0) return nullptr;
-  // Search from newest to oldest for most recent producer
+  // Search from newest to oldest for most recent producer from the SAME warp.
+  // Different warps share register names but have independent register files.
   for (unsigned i = 0; i < m_count; ++i) {
     unsigned idx = (m_tail + m_depth - 1 - i) % m_depth;
-    if (m_fifo[idx].valid && m_fifo[idx].dst_reg == reg) {
+    if (m_fifo[idx].valid && m_fifo[idx].dst_reg == reg &&
+        m_fifo[idx].warp_id == warp_id) {
       return &m_fifo[idx];
     }
   }
@@ -99,6 +101,7 @@ bool grasp_chain_detector_t::on_instruction_issue(
     unsigned warp_id, new_addr_type pc, op_type op,
     const std::string &sass_opcode, int dst_reg, const int *src_regs,
     unsigned num_src_regs, unsigned long long cycle,
+    new_addr_type first_lane_addr, unsigned first_lane_id,
     detected_chain_t *out_chain) {
   // C7: if training is frozen, skip all FIFO operations
   if (m_training_frozen) return false;
@@ -129,7 +132,7 @@ bool grasp_chain_detector_t::on_instruction_issue(
     // Check if address register was produced by an IMAD.WIDE (→ data load)
     for (unsigned s = 0; s < num_src_regs; ++s) {
       if (src_regs[s] < 0) continue;
-      const fifo_entry_t *producer = lookup_by_reg(src_regs[s]);
+      const fifo_entry_t *producer = lookup_by_reg(src_regs[s], warp_id);
       if (producer && producer->type == IMA_ADDR_COMPUTE) {
         // Complete chain detected: index_PC → IMAD.WIDE → data_PC
         if (out_chain) {
@@ -137,8 +140,14 @@ bool grasp_chain_detector_t::on_instruction_issue(
           out_chain->data_pc = pc;
           out_chain->scale_placeholder = producer->scale;
           out_chain->base_placeholder = producer->base;
+          out_chain->index_addr = producer->index_addr;
+          out_chain->index_lane_id = producer->index_lane_id;
         }
         ++m_stats.chains_detected;
+        // Track unique index PCs for CT coverage metric
+        if (m_unique_index_pcs.insert(producer->index_pc).second) {
+          ++m_stats.unique_index_pcs_detected;
+        }
 
         // Push data load result into FIFO (it might be used as index for
         // a subsequent chain)
@@ -146,8 +155,11 @@ bool grasp_chain_detector_t::on_instruction_issue(
           fifo_entry_t entry;
           entry.valid = true;
           entry.dst_reg = dst_reg;
+          entry.warp_id = warp_id;
           entry.type = LOAD_RESULT;
           entry.pc = pc;
+          entry.addr = first_lane_addr;
+          entry.lane_id = first_lane_id;
           push(entry);
         }
         return true;
@@ -158,24 +170,30 @@ bool grasp_chain_detector_t::on_instruction_issue(
       fifo_entry_t entry;
       entry.valid = true;
       entry.dst_reg = dst_reg;
+      entry.warp_id = warp_id;
       entry.type = LOAD_RESULT;
       entry.pc = pc;
+      entry.addr = first_lane_addr;
+      entry.lane_id = first_lane_id;
       push(entry);
     }
   } else if (is_imad_wide) {
     // IMAD.WIDE: check if source register was produced by a load (index load)
     for (unsigned s = 0; s < num_src_regs; ++s) {
       if (src_regs[s] < 0) continue;
-      const fifo_entry_t *producer = lookup_by_reg(src_regs[s]);
+      const fifo_entry_t *producer = lookup_by_reg(src_regs[s], warp_id);
       if (producer && producer->type == LOAD_RESULT) {
         // IMAD.WIDE consuming a load result → address computation
         if (dst_reg >= 0) {
           fifo_entry_t entry;
           entry.valid = true;
           entry.dst_reg = dst_reg;
+          entry.warp_id = warp_id;
           entry.type = IMA_ADDR_COMPUTE;
           entry.pc = pc;
           entry.index_pc = producer->pc;  // PC of the index load
+          entry.index_addr = producer->addr;  // address of the index load
+          entry.index_lane_id = producer->lane_id;
           entry.scale = 0;  // placeholder in trace-driven mode
           entry.base = 0;   // placeholder in trace-driven mode
           push(entry);
@@ -229,10 +247,13 @@ void grasp_chain_detector_t::reset() {
   m_tracked_warp_ids[1] = UNSET_WARP;
   m_training_frozen = false;
   m_stats = cd_stats_t();
+  m_unique_index_pcs.clear();
 }
 
 void grasp_chain_detector_t::check_freeze(const grasp_chain_table_t &ct) {
-  if (ct.all_stride_valid()) {
+  // Freeze only when CT is full AND every entry has learned its stride.
+  // If CT has empty slots, new IMA chains may still appear and need detection.
+  if (ct.is_full() && ct.all_stride_valid()) {
     m_training_frozen = true;
   }
 }

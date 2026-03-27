@@ -163,6 +163,9 @@ struct cache_block_t {
                               mem_access_sector_mask_t sector_mask) = 0;
   virtual bool is_readable(mem_access_sector_mask_t sector_mask) = 0;
   virtual void print_status() = 0;
+  // Prefetch tracking (metrics framework)
+  virtual void set_prefetched(bool v, mem_access_sector_mask_t mask) = 0;
+  virtual bool is_prefetched(mem_access_sector_mask_t mask) const = 0;
   virtual ~cache_block_t() {}
 
   new_addr_type m_tag;
@@ -179,6 +182,7 @@ struct line_cache_block : public cache_block_t {
     m_set_modified_on_fill = false;
     m_set_readable_on_fill = false;
     m_readable = true;
+    m_prefetched = false;
   }
   void allocate(new_addr_type tag, new_addr_type block_addr, unsigned time,
                 mem_access_sector_mask_t sector_mask) {
@@ -192,6 +196,7 @@ struct line_cache_block : public cache_block_t {
     m_set_modified_on_fill = false;
     m_set_readable_on_fill = false;
     m_set_byte_mask_on_fill = false;
+    m_prefetched = false;
   }
   virtual void fill(unsigned time, mem_access_sector_mask_t sector_mask,
                     mem_access_byte_mask_t byte_mask) {
@@ -268,6 +273,12 @@ struct line_cache_block : public cache_block_t {
   virtual void print_status() {
     printf("m_block_addr is %llu, status = %u\n", m_block_addr, m_status);
   }
+  virtual void set_prefetched(bool v, mem_access_sector_mask_t) override {
+    m_prefetched = v;
+  }
+  virtual bool is_prefetched(mem_access_sector_mask_t) const override {
+    return m_prefetched;
+  }
 
  private:
   unsigned long long m_alloc_time;
@@ -279,6 +290,7 @@ struct line_cache_block : public cache_block_t {
   bool m_set_readable_on_fill;
   bool m_set_byte_mask_on_fill;
   bool m_readable;
+  bool m_prefetched;
   mem_access_byte_mask_t m_dirty_byte_mask;
 };
 
@@ -295,6 +307,7 @@ struct sector_cache_block : public cache_block_t {
       m_set_modified_on_fill[i] = false;
       m_set_readable_on_fill[i] = false;
       m_readable[i] = true;
+      m_prefetched[i] = false;
     }
     m_line_alloc_time = 0;
     m_line_last_access_time = 0;
@@ -486,6 +499,14 @@ struct sector_cache_block : public cache_block_t {
     printf("m_block_addr is %llu, status = %u %u %u %u\n", m_block_addr,
            m_status[0], m_status[1], m_status[2], m_status[3]);
   }
+  virtual void set_prefetched(bool v, mem_access_sector_mask_t mask) override {
+    unsigned sidx = get_sector_index(mask);
+    if (sidx < SECTOR_CHUNCK_SIZE) m_prefetched[sidx] = v;
+  }
+  virtual bool is_prefetched(mem_access_sector_mask_t mask) const override {
+    unsigned sidx = get_sector_index(mask);
+    return (sidx < SECTOR_CHUNCK_SIZE) ? m_prefetched[sidx] : false;
+  }
 
  private:
   unsigned m_sector_alloc_time[SECTOR_CHUNCK_SIZE];
@@ -500,9 +521,10 @@ struct sector_cache_block : public cache_block_t {
   bool m_set_readable_on_fill[SECTOR_CHUNCK_SIZE];
   bool m_set_byte_mask_on_fill;
   bool m_readable[SECTOR_CHUNCK_SIZE];
+  bool m_prefetched[SECTOR_CHUNCK_SIZE];
   mem_access_byte_mask_t m_dirty_byte_mask;
 
-  unsigned get_sector_index(mem_access_sector_mask_t sector_mask) {
+  unsigned get_sector_index(mem_access_sector_mask_t sector_mask) const {
     assert(sector_mask.count() == 1);
     for (unsigned i = 0; i < SECTOR_CHUNCK_SIZE; ++i) {
       if (sector_mask.to_ulong() & (1 << i)) return i;
@@ -970,6 +992,12 @@ class tag_array {
   unsigned size() const { return m_config.get_num_lines(); }
   cache_block_t *get_block(unsigned idx) { return m_lines[idx]; }
 
+  // Prefetch metrics: demand load hit on prefetch-filled line
+  unsigned long long get_demand_hit_prefetch() const {
+    return m_demand_hit_prefetch;
+  }
+  void inc_demand_hit_prefetch() { ++m_demand_hit_prefetch; }
+
   void flush();       // flush all written entries
   void invalidate();  // invalidate all entries
   void new_window();
@@ -1016,6 +1044,9 @@ class tag_array {
   int m_type_id;  // what kind of cache is this (normal, texture, constant)
 
   bool is_used;  // a flag if the whole cache has ever been accessed before
+
+  // Prefetch metrics
+  unsigned long long m_demand_hit_prefetch = 0;
 
   typedef tr1_hash_map<new_addr_type, unsigned> line_table;
   line_table pending_lines;
@@ -1290,9 +1321,10 @@ class baseline_cache : public cache_t {
       : m_config(config),
         m_tag_array(new tag_array(config, core_id, type_id)),
         m_mshrs(config.m_mshr_entries, config.m_mshr_max_merge),
-        m_bandwidth_management(config),
         m_level(level),
-        m_gpu(gpu) {
+        m_gpu(gpu),
+        m_last_fail_reason(LINE_ALLOC_FAIL),
+        m_bandwidth_management(config) {
     init(name, config, memport, status);
   }
 
@@ -1328,6 +1360,11 @@ class baseline_cache : public cache_t {
   bool access_ready() const { return m_mshrs.access_ready(); }
   /// Pop next ready access (does not include accesses that "HIT")
   mem_fetch *next_access() { return m_mshrs.next_access(); }
+  /// Last reservation-fail reason (valid only after access() returns RESERVATION_FAIL)
+  enum cache_reservation_fail_reason last_fail_reason() const {
+    return m_last_fail_reason;
+  }
+
   /// GRASP throttle: MSHR occupancy ratio (0.0 ~ 1.0)
   float mshr_occupancy_ratio() const {
     unsigned cap = m_mshrs.capacity();
@@ -1336,6 +1373,11 @@ class baseline_cache : public cache_t {
   // flash invalidate all entries in cache
   void flush() { m_tag_array->flush(); }
   void invalidate() { m_tag_array->invalidate(); }
+
+  // Prefetch metrics: demand load hit on prefetch-filled line
+  unsigned long long get_demand_hit_prefetch() const {
+    return m_tag_array->get_demand_hit_prefetch();
+  }
   void print(FILE *fp, unsigned &accesses, unsigned &misses) const;
   void display_state(FILE *fp) const;
 
@@ -1393,6 +1435,7 @@ class baseline_cache : public cache_t {
       : m_config(config),
         m_tag_array(new_tag_array),
         m_mshrs(config.m_mshr_entries, config.m_mshr_max_merge),
+        m_last_fail_reason(LINE_ALLOC_FAIL),
         m_bandwidth_management(config) {
     init(name, config, memport, status);
   }
@@ -1407,6 +1450,9 @@ class baseline_cache : public cache_t {
   mem_fetch_interface *m_memport;
   cache_gpu_level m_level;
   gpgpu_sim *m_gpu;
+
+  /// Last reservation-fail reason set during access()
+  enum cache_reservation_fail_reason m_last_fail_reason;
 
   struct extra_mf_fields {
     extra_mf_fields() { m_valid = false; }

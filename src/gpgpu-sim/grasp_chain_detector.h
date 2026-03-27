@@ -14,6 +14,7 @@
 
 #include <cstdint>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "../abstract_hardware_model.h"
@@ -32,6 +33,9 @@ class grasp_chain_detector_t {
     // Trace-driven mode: scale/base are placeholders
     unsigned scale_placeholder;
     unsigned base_placeholder;
+    // Index load address (first active lane) — used to seed stride observation
+    new_addr_type index_addr;
+    unsigned index_lane_id;
   };
 
   // Called on each instruction issue (tracked warp only).
@@ -40,6 +44,8 @@ class grasp_chain_detector_t {
                             const std::string &sass_opcode, int dst_reg,
                             const int *src_regs,  // inst.arch_reg.src[]
                             unsigned num_src_regs, unsigned long long cycle,
+                            new_addr_type first_lane_addr,
+                            unsigned first_lane_id,
                             detected_chain_t *out_chain);
 
   // Warp exit: clear FIFO
@@ -71,6 +77,8 @@ class grasp_chain_detector_t {
     unsigned long long fifo_drop_count = 0;
     unsigned long long fifo_read_invalidations = 0;
     unsigned long long fifo_write_invalidations = 0;
+    // Metrics: distinct index PCs ever detected (for CT coverage denominator)
+    unsigned long long unique_index_pcs_detected = 0;
   };
   const cd_stats_t &stats() const { return m_stats; }
 
@@ -83,17 +91,23 @@ class grasp_chain_detector_t {
   struct fifo_entry_t {
     bool valid = false;
     int dst_reg = -1;
+    unsigned warp_id = (unsigned)-1;  // owning warp
     fifo_type_t type = LOAD_RESULT;
     new_addr_type pc = 0;
+    // Memory address (first active lane) — for LOAD_RESULT
+    new_addr_type addr = 0;
+    unsigned lane_id = 0;
     // Only for IMA_ADDR_COMPUTE type
     new_addr_type index_pc = 0;
+    new_addr_type index_addr = 0;
+    unsigned index_lane_id = 0;
     unsigned scale = 0;
     unsigned base = 0;
   };
 
   // Circular buffer FIFO operations
   void push(const fifo_entry_t &entry);
-  const fifo_entry_t *lookup_by_reg(int reg) const;  // reverse lookup
+  const fifo_entry_t *lookup_by_reg(int reg, unsigned warp_id) const;
   void invalidate_by_src(const int *src_regs,
                          unsigned num_src);  // Read Detection
   void invalidate_by_dst(int dst_reg);       // Write Invalidation
@@ -106,4 +120,7 @@ class grasp_chain_detector_t {
   bool m_training_frozen = false;
 
   cd_stats_t m_stats;
+
+  // Metrics: track unique index PCs for CT coverage ratio
+  std::unordered_set<new_addr_type> m_unique_index_pcs;
 };

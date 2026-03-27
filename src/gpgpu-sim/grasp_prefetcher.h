@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "../abstract_hardware_model.h"
+#include "gpu-cache.h"  // cache_reservation_fail_reason, NUM_CACHE_RESERVATION_FAIL_STATUS
 #include "grasp_chain_detector.h"
 #include "grasp_tables.h"
 
@@ -190,14 +191,16 @@ struct grasp_stats_t {
   unsigned long long index_pf_hit = 0;
   unsigned long long index_pf_miss = 0;
   unsigned long long index_pf_mshr_merge = 0;
-  unsigned long long index_pf_reservation_fail = 0;
+  unsigned long long index_pf_reservation_fail = 0;  // total (sum of per-reason)
+  unsigned long long index_pf_rfail[NUM_CACHE_RESERVATION_FAIL_STATUS] = {};
 
   // Data Prefetch
   unsigned long long data_pf_issued = 0;
   unsigned long long data_pf_hit = 0;
   unsigned long long data_pf_miss = 0;
   unsigned long long data_pf_mshr_merge = 0;
-  unsigned long long data_pf_reservation_fail = 0;
+  unsigned long long data_pf_reservation_fail = 0;  // total (sum of per-reason)
+  unsigned long long data_pf_rfail[NUM_CACHE_RESERVATION_FAIL_STATUS] = {};
 
   // Pair Table
   unsigned long long pair_table_lookup_hit = 0;
@@ -272,7 +275,9 @@ class grasp_prefetcher_t {
 
   // === L1 access result tracking ===
   void on_l1_access_result(mem_fetch *mf, int cache_status,
-                           unsigned long long cycle);
+                           unsigned long long cycle,
+                           enum cache_reservation_fail_reason fail_reason =
+                               LINE_ALLOC_FAIL);
 
   // === Stats ===
   void print_stats(FILE *fp) const;
@@ -296,6 +301,14 @@ class grasp_prefetcher_t {
 
   // Stats
   grasp_stats_t m_stats;
+
+  // Per-warp instruction dedup for on_demand_load (avoids cross-warp
+  // interleaving overwriting shared CT entry fields).
+  struct warp_dedup_t {
+    int ct_idx = -1;
+    unsigned long long inst_uid = 0;
+  };
+  std::vector<warp_dedup_t> m_demand_dedup;  // indexed by warp_id
 
   // Cross-kernel CT persistence
   const void *m_last_kernel_entry = nullptr;
