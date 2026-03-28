@@ -361,6 +361,8 @@ enum cache_request_status tag_array::access(new_addr_type addr, unsigned time,
       m_miss++;
       shader_cache_access_log(m_core_id, m_type_id, 1);  // log cache misses
       if (m_config.m_alloc_policy == ON_MISS) {
+        // pf_useless: count prefetched sectors being evicted without demand use
+        m_pf_useless += m_lines[idx]->count_prefetched_sectors();
         if (m_lines[idx]->is_modified_line()) {
           wb = true;
           // m_lines[idx]->set_byte_mask(mf);
@@ -1377,6 +1379,12 @@ void baseline_cache::send_read_request(new_addr_type addr,
   bool mshr_hit = m_mshrs.probe(mshr_addr);
   bool mshr_avail = !m_mshrs.full(mshr_addr);
   if (mshr_hit && mshr_avail) {
+    // pf_late: demand load merging into a prefetch-initiated MSHR entry
+    if (!mf->is_ima_prefetch() &&
+        m_mshrs.is_prefetch_initiated(mshr_addr)) {
+      m_tag_array->inc_pf_late();
+    }
+
     if (read_only)
       m_tag_array->access(block_addr, time, cache_index, mf);
     else

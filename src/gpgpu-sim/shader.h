@@ -1489,6 +1489,18 @@ class ldst_unit : public pipelined_simd_unit {
   void get_L1C_sub_stats(struct cache_sub_stats &css) const;
   void get_L1T_sub_stats(struct cache_sub_stats &css) const;
 
+  // Prefetch effectiveness metrics from L1D cache
+  void get_pf_metrics(unsigned long long &pf_useful,
+                      unsigned long long &pf_useless,
+                      unsigned long long &pf_late) const {
+    pf_useful = pf_useless = pf_late = 0;
+    if (m_L1D) {
+      pf_useful = m_L1D->get_demand_hit_prefetch();
+      pf_useless = m_L1D->get_pf_useless();
+      pf_late = m_L1D->get_pf_late();
+    }
+  }
+
   // IMA prefetcher: drain one pending prefetch per cycle into L1D.
   void inject_ima_prefetches(unsigned long long cycle);
   void queue_ima_prefetch_request(new_addr_type addr, unsigned warp_id,
@@ -2321,6 +2333,7 @@ class shader_core_ctx : public core_t {
   void print_cache_stats(FILE *fp, unsigned &dl1_accesses,
                          unsigned &dl1_misses);
   void print_grasp_stats(FILE *fp) const;
+  void print_grasp_config(FILE *fp) const;
 
   void get_cache_stats(cache_stats &cs);
   void get_L1I_sub_stats(struct cache_sub_stats &css) const;
@@ -2875,6 +2888,7 @@ class simt_core_cluster {
   void print_cache_stats(FILE *fp, unsigned &dl1_accesses,
                          unsigned &dl1_misses) const;
   void print_grasp_stats(FILE *fp) const;
+  void print_grasp_config(FILE *fp) const;
 
   void get_cache_stats(cache_stats &cs) const;
   void get_L1I_sub_stats(struct cache_sub_stats &css) const;

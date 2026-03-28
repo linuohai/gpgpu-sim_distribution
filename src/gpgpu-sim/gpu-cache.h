@@ -166,6 +166,8 @@ struct cache_block_t {
   // Prefetch tracking (metrics framework)
   virtual void set_prefetched(bool v, mem_access_sector_mask_t mask) = 0;
   virtual bool is_prefetched(mem_access_sector_mask_t mask) const = 0;
+  // Count prefetched-but-unused sectors (for pf_useless metric on eviction)
+  virtual unsigned count_prefetched_sectors() const = 0;
   virtual ~cache_block_t() {}
 
   new_addr_type m_tag;
@@ -278,6 +280,9 @@ struct line_cache_block : public cache_block_t {
   }
   virtual bool is_prefetched(mem_access_sector_mask_t) const override {
     return m_prefetched;
+  }
+  virtual unsigned count_prefetched_sectors() const override {
+    return m_prefetched ? 1 : 0;
   }
 
  private:
@@ -506,6 +511,12 @@ struct sector_cache_block : public cache_block_t {
   virtual bool is_prefetched(mem_access_sector_mask_t mask) const override {
     unsigned sidx = get_sector_index(mask);
     return (sidx < SECTOR_CHUNCK_SIZE) ? m_prefetched[sidx] : false;
+  }
+  virtual unsigned count_prefetched_sectors() const override {
+    unsigned cnt = 0;
+    for (unsigned i = 0; i < SECTOR_CHUNCK_SIZE; ++i)
+      if (m_status[i] != INVALID && m_prefetched[i]) ++cnt;
+    return cnt;
   }
 
  private:
@@ -997,6 +1008,9 @@ class tag_array {
     return m_demand_hit_prefetch;
   }
   void inc_demand_hit_prefetch() { ++m_demand_hit_prefetch; }
+  unsigned long long get_pf_useless() const { return m_pf_useless; }
+  unsigned long long get_pf_late() const { return m_pf_late; }
+  void inc_pf_late() { ++m_pf_late; }
 
   void flush();       // flush all written entries
   void invalidate();  // invalidate all entries
@@ -1046,7 +1060,9 @@ class tag_array {
   bool is_used;  // a flag if the whole cache has ever been accessed before
 
   // Prefetch metrics
-  unsigned long long m_demand_hit_prefetch = 0;
+  unsigned long long m_demand_hit_prefetch = 0;  // pf_useful: demand hit on prefetched line
+  unsigned long long m_pf_useless = 0;           // sector-level: evicted prefetched sectors never used
+  unsigned long long m_pf_late = 0;              // demand merged into prefetch-initiated MSHR
 
   typedef tr1_hash_map<new_addr_type, unsigned> line_table;
   line_table pending_lines;
@@ -1085,6 +1101,13 @@ class mshr_table {
   // GRASP throttle: MSHR occupancy query
   unsigned occupancy() const { return m_data.size(); }
   unsigned capacity() const { return m_num_entries; }
+
+  // Check if the MSHR entry for block_addr was initiated by a prefetch
+  bool is_prefetch_initiated(new_addr_type block_addr) const {
+    table::const_iterator it = m_data.find(block_addr);
+    if (it == m_data.end() || it->second.m_list.empty()) return false;
+    return it->second.m_list.front()->is_ima_prefetch();
+  }
 
   void check_mshr_parameters(unsigned num_entries, unsigned max_merged) {
     assert(m_num_entries == num_entries &&
@@ -1377,6 +1400,12 @@ class baseline_cache : public cache_t {
   // Prefetch metrics: demand load hit on prefetch-filled line
   unsigned long long get_demand_hit_prefetch() const {
     return m_tag_array->get_demand_hit_prefetch();
+  }
+  unsigned long long get_pf_useless() const {
+    return m_tag_array->get_pf_useless();
+  }
+  unsigned long long get_pf_late() const {
+    return m_tag_array->get_pf_late();
   }
   void print(FILE *fp, unsigned &accesses, unsigned &misses) const;
   void display_state(FILE *fp) const;

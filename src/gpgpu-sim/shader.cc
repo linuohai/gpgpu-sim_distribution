@@ -3991,6 +3991,18 @@ void ldst_unit::writeback() {
             m_next_wb = mf->get_inst();
             serviced_client = next_client;
           }
+          // v7 P3: GRASP callback for MSHR-merged INDEX_PF mfs.
+          // Original mfs were already processed in response_fifo → on_fill();
+          // release_prb_sector_targets is idempotent (dispatched flag).
+          // Merged mfs (added via m_mshrs.add during MSHR_HIT) get their
+          // first and only on_fill() call here.
+          if (m_grasp && mf->is_ima_prefetch() &&
+              mf->get_ima_kind() == IMA_PREFETCH_INDEX) {
+            unsigned long long fill_cycle =
+                m_core->get_gpu()->gpu_sim_cycle +
+                m_core->get_gpu()->gpu_tot_sim_cycle;
+            m_grasp->on_fill(mf, fill_cycle);
+          }
           // Prefetch fill (empty inst): data is now in L1; no register writeback.
           // serviced_client intentionally not set so the loop continues seeking
           // real demand writeback work.
@@ -5628,7 +5640,15 @@ void shader_core_ctx::print_cache_stats(FILE *fp, unsigned &dl1_accesses,
 
 void shader_core_ctx::print_grasp_stats(FILE *fp) const {
   if (m_ldst_unit->grasp_enabled()) {
-    m_ldst_unit->grasp()->print_stats(fp);
+    unsigned long long pf_useful, pf_useless, pf_late;
+    m_ldst_unit->get_pf_metrics(pf_useful, pf_useless, pf_late);
+    m_ldst_unit->grasp()->print_stats(fp, pf_useful, pf_useless, pf_late);
+  }
+}
+
+void shader_core_ctx::print_grasp_config(FILE *fp) const {
+  if (m_ldst_unit->grasp_enabled()) {
+    m_ldst_unit->grasp()->print_config(fp);
   }
 }
 
@@ -6428,6 +6448,13 @@ void simt_core_cluster::print_cache_stats(FILE *fp, unsigned &dl1_accesses,
 void simt_core_cluster::print_grasp_stats(FILE *fp) const {
   for (unsigned i = 0; i < m_config->n_simt_cores_per_cluster; ++i) {
     m_core[i]->print_grasp_stats(fp);
+  }
+}
+
+void simt_core_cluster::print_grasp_config(FILE *fp) const {
+  // Print config once from the first core in this cluster
+  if (m_config->n_simt_cores_per_cluster > 0) {
+    m_core[0]->print_grasp_config(fp);
   }
 }
 

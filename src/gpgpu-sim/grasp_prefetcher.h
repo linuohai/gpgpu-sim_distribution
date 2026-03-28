@@ -72,12 +72,12 @@ struct grasp_config_t {
 // ============================================================================
 
 struct grasp_prefetch_request_t {
-  new_addr_type addr = 0;
+  new_addr_type addr = 0;                // sector address (32B-aligned for INDEX_PF)
   unsigned warp_id = (unsigned)-1;
-  std::vector<unsigned> seed_chain_ids;  // non-empty = INDEX_PF, empty = DATA_PF
+  std::vector<unsigned> seed_chain_ids;   // non-empty = INDEX_PF, empty = DATA_PF
   unsigned long long ready_cycle = 0;
-  int prb_entry_id = -1;       // >=0: retry INDEX_PF reusing existing PRB entry
-  unsigned retry_count = 0;    // MSHR_HIT retry counter
+  int prb_entry_id = -1;                 // >=0: pre-allocated shared PRB (v7 P1)
+  std::vector<new_addr_type> lane_addrs;  // v7 P2: specific predicted addresses in this sector
 };
 
 // ============================================================================
@@ -90,22 +90,31 @@ struct grasp_prb_entry_t {
   // Snapshot of CT's tt_idx[] and num_targets (decoupled from CT lifetime)
   unsigned tt_idx[3] = {(unsigned)-1, (unsigned)-1, (unsigned)-1};
   unsigned num_targets = 0;
-  // Pair table lookup result cache
-  std::vector<ima_prefetch_candidate_t> candidates;
+  // v7 P1: per-sector candidate storage (replaces flat candidates vector).
+  // Each sector's candidates are dispatched independently as its fill arrives.
+  // dispatched flag provides idempotency for the writeback path (P3).
+  struct sector_data_t {
+    new_addr_type sector_addr = 0;
+    std::vector<ima_prefetch_candidate_t> candidates;
+    bool dispatched = false;
+  };
+  std::vector<sector_data_t> sector_data;
   // Sector tracking
   unsigned remaining_sectors = 0;
   unsigned long long alloc_cycle = 0;  // for lifetime stats
-  unsigned retry_count = 0;    // MSHR_HIT retry counter
 };
 
 class grasp_prb_t {
  public:
   explicit grasp_prb_t(unsigned initial_capacity);
 
-  // Allocate entry, return prb_entry_id or -1 (full)
-  int allocate(unsigned warp_id,
-               const std::vector<ima_prefetch_candidate_t> &cands,
-               unsigned num_sectors, unsigned long long cycle);
+  // v7 P1: allocate without candidates (filled per-sector at inject time)
+  int allocate(unsigned warp_id, unsigned num_sectors,
+               unsigned long long cycle);
+
+  // v7 P1: add candidates for a specific sector to an existing entry
+  void add_sector_candidates(unsigned prb_entry_id, new_addr_type sector_addr,
+                             std::vector<ima_prefetch_candidate_t> &&cands);
 
   // Free entry
   void free_entry(unsigned prb_entry_id);
@@ -216,6 +225,14 @@ struct grasp_stats_t {
 
   // Prefetch Queue
   unsigned long long queue_peak_depth = 0;
+
+  // Demand load tracking (all global loads)
+  unsigned long long total_demand_global_reads = 0;
+  unsigned long long total_demand_global_misses = 0;
+
+  // IMA-specific demand load tracking (only loads whose PC is in CT)
+  unsigned long long ima_demand_reads = 0;
+  unsigned long long ima_demand_misses = 0;
 };
 
 // ============================================================================
@@ -249,7 +266,8 @@ class grasp_prefetcher_t {
   // index prefetch requests.
   void on_demand_load(unsigned warp_id, new_addr_type pc, new_addr_type addr,
                       unsigned long long cycle, shd_warp_t *warp,
-                      const mem_fetch *mf = nullptr);
+                      const mem_fetch *mf = nullptr,
+                      int l1_status = -1);
 
   // === Prefetch injection (IPU + DPU) ===
 
@@ -280,12 +298,17 @@ class grasp_prefetcher_t {
                                LINE_ALLOC_FAIL);
 
   // === Stats ===
-  void print_stats(FILE *fp) const;
+  void print_config(FILE *fp) const;
+  void print_stats(FILE *fp, unsigned long long pf_useful = 0,
+                   unsigned long long pf_useless = 0,
+                   unsigned long long pf_late = 0) const;
 
   // Accessors
   bool enabled() const { return m_cfg.enable; }
   bool debug() const { return m_cfg.debug; }
   const grasp_stats_t &stats() const { return m_stats; }
+  grasp_stats_t &stats_mut() { return m_stats; }
+  void set_l1d(l1_cache *l1d) { m_l1d = l1d; }
 
  private:
   unsigned m_sm_id;
@@ -310,16 +333,23 @@ class grasp_prefetcher_t {
   };
   std::vector<warp_dedup_t> m_demand_dedup;  // indexed by warp_id
 
+  // L1D cache pointer (set via set_l1d)
+  l1_cache *m_l1d = nullptr;
+
   // Cross-kernel CT persistence
   const void *m_last_kernel_entry = nullptr;
-  static constexpr unsigned MSHR_RETRY_DELAY = 50;  // cycles before retry
-  static constexpr unsigned MAX_RETRIES = 3;
 
   // Helpers
   void queue_prefetch(new_addr_type addr, unsigned warp_id,
                       const std::vector<unsigned> &seed_chain_ids,
-                      unsigned long long ready_cycle);
+                      unsigned long long ready_cycle,
+                      int prb_entry_id = -1,
+                      const std::vector<new_addr_type> &lane_addrs = {});
   int find_ready_prefetch(unsigned long long cycle) const;
-  void release_prb_targets(unsigned prb_entry_id,
-                           unsigned long long ready_cycle);
+  // v7 P1: per-sector dispatch (replaces release_prb_targets)
+  void release_prb_sector_targets(unsigned prb_entry_id,
+                                  new_addr_type sector_addr,
+                                  unsigned long long ready_cycle);
+  // v7: mark sector as failed (RFAIL) — dispatched=true, remaining--, no data PF
+  void mark_sector_failed(unsigned prb_entry_id, new_addr_type sector_addr);
 };

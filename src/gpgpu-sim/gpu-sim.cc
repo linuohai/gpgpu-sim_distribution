@@ -1883,6 +1883,8 @@ void gpgpu_sim::gpu_print_stat(unsigned long long streamID) {
   // GRASP prefetcher stats (per-SM)
   if (m_shader_config->grasp_enable) {
     printf("\n========= GRASP Prefetcher Stats =========\n");
+    // Print config once (from SM0)
+    m_cluster[0]->print_grasp_config(stdout);
     for (unsigned i = 0; i < m_config.num_cluster(); i++) {
       m_cluster[i]->print_grasp_stats(stdout);
     }
