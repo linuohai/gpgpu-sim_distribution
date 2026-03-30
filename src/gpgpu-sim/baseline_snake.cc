@@ -19,6 +19,16 @@ void baseline_snake_prefetcher_t::on_kernel_launch() {
   for (auto &e : m_ht) e = ht_entry_t();
   for (auto &w : m_warp_trackers) w = warp_pc_tracker_t();
   m_throttle_until = 0;
+  m_pf_iaw_issued = 0;
+  m_pf_iew_issued = 0;
+  m_pf_it_issued = 0;
+  m_training_completions = 0;
+  m_it_chain_follows = 0;
+  m_iaw_accum_checks = 0;
+  m_iaw_it_not_valid = 0;
+  m_iaw_pc_mismatch = 0;
+  m_iaw_chain_found = 0;
+  m_iaw_accum_ok = 0;
 }
 
 void baseline_snake_prefetcher_t::on_warp_exit(unsigned warp_id) {
@@ -68,51 +78,64 @@ int baseline_snake_prefetcher_t::alloc_ht_entry(new_addr_type pc,
   return static_cast<int>(victim);
 }
 
-// --- Stride learning ---
+// --- Head Table slot update (paper §3.1, Table 3: 2 warps per PC_ld) ---
+// Each PC entry stores 2 (warp_id, addr) slots.
+// When warp W accesses PC at addr A:
+//   - If W matches a slot → IaW: stride = A - slot.addr (same warp, same PC)
+//   - If W is new → IeW: stride = A - other_slot.addr (different warp, same PC)
+//   - Replace LRU slot with (W, A)
 
-void baseline_snake_prefetcher_t::update_iaw_stride(ht_entry_t &entry,
-                                                     unsigned warp_id,
-                                                     new_addr_type addr) {
-  if (entry.iaw_last_warp_id == warp_id && entry.iaw_last_addr != 0) {
-    int64_t delta = static_cast<int64_t>(addr) -
-                    static_cast<int64_t>(entry.iaw_last_addr);
-    if (delta != 0) {
-      if (delta == entry.iaw_stride) {
-        entry.iaw_confirmed = true;
-      } else {
-        entry.iaw_stride = delta;
-        entry.iaw_confirmed = false;
+void baseline_snake_prefetcher_t::update_head_table_slots(
+    ht_entry_t &entry, unsigned warp_id, new_addr_type addr) {
+  auto &s0 = entry.head_slots[0];
+  auto &s1 = entry.head_slots[1];
+
+  // Check if this warp already has a slot → update addr only (no IaW here,
+  // IaW is computed via IT stride accumulation in case 2)
+  int my_slot = -1;
+  if (s0.valid && s0.warp_id == warp_id) my_slot = 0;
+  else if (s1.valid && s1.warp_id == warp_id) my_slot = 1;
+
+  if (my_slot >= 0) {
+    // Same warp revisiting this PC → just update address
+    entry.head_slots[my_slot].addr = addr;
+  } else {
+    // IeW: different warp accessing same PC
+    // Compare with the most recent valid slot
+    int other = -1;
+    if (s0.valid) other = 0;
+    if (s1.valid) other = 1;  // prefer slot 1 (more recent)
+
+    if (other >= 0) {
+      auto &slot = entry.head_slots[other];
+      int64_t delta = static_cast<int64_t>(addr) -
+                      static_cast<int64_t>(slot.addr);
+      if (delta != 0) {
+        if (delta == entry.iew_stride) {
+          entry.iew_confirmed = true;
+        } else {
+          entry.iew_stride = delta;
+          entry.iew_confirmed = false;
+        }
       }
     }
-  }
-  entry.iaw_last_addr = addr;
-  entry.iaw_last_warp_id = warp_id;
-}
 
-void baseline_snake_prefetcher_t::update_iew_stride(ht_entry_t &entry,
-                                                     unsigned warp_id,
-                                                     unsigned cta_id,
-                                                     new_addr_type addr) {
-  // IeW stride: delta between different warps in the SAME CTA.
-  // Cross-CTA warps have different base addresses, so comparing them
-  // produces garbage strides. Filter by CTA to ensure clean training.
-  if (entry.iew_last_warp_id != static_cast<unsigned>(-1) &&
-      entry.iew_last_warp_id != warp_id &&
-      entry.iew_last_cta_id == cta_id) {  // SAME CTA only!
-    int64_t delta = static_cast<int64_t>(addr) -
-                    static_cast<int64_t>(entry.iew_last_addr);
-    if (delta != 0) {
-      if (delta == entry.iew_stride) {
-        entry.iew_confirmed = true;
-      } else {
-        entry.iew_stride = delta;
-        entry.iew_confirmed = false;
-      }
+    // Replace the oldest/invalid slot with this warp
+    ht_entry_t::warp_slot_t new_slot;
+    new_slot.warp_id = warp_id;
+    new_slot.addr = addr;
+    new_slot.valid = true;
+
+    if (!s0.valid) {
+      s0 = new_slot;
+    } else if (!s1.valid) {
+      s1 = new_slot;
+    } else {
+      // Both valid, replace slot 0 (older), shift slot 1 → slot 0
+      s0 = s1;
+      s1 = new_slot;
     }
   }
-  entry.iew_last_addr = addr;
-  entry.iew_last_warp_id = warp_id;
-  entry.iew_last_cta_id = cta_id;
 }
 
 // --- IT stride update (paper §3.1 Detection Step, Figure 12) ---
@@ -190,26 +213,29 @@ void baseline_snake_prefetcher_t::generate_prefetches(
   // 1. IaW prefetch (same warp, same PC, across iterations)
   if (entry.iaw_confirmed && entry.iaw_stride != 0) {
     new_addr_type pf_addr = static_cast<new_addr_type>(
-        static_cast<int64_t>(addr) + entry.iaw_stride);
+        static_cast<int64_t>(addr) +
+        static_cast<int64_t>(entry.iaw_stride) * kIaWLookahead);
     queue_prefetch(pf_addr, warp_id, cycle);
+    m_pf_iaw_issued++;
   }
 
-  // 2. IeW prefetch (different warps, same PC)
+  // 2. IeW prefetch: skip nearby warps (too late), prefetch further ahead
+  // Paper §3.2: "each thread to prefetch for future warps"
+  // With GTO, adjacent warps execute within 1-2 cycles.
+  // Prefetch ~16 warps ahead for ~100 cycle L2 round trip.
   if (entry.iew_confirmed && entry.iew_stride != 0) {
     new_addr_type pf_addr = static_cast<new_addr_type>(
-        static_cast<int64_t>(addr) + entry.iew_stride);
+        static_cast<int64_t>(addr) +
+        static_cast<int64_t>(entry.iew_stride) * kIeWLookahead);
     queue_prefetch(pf_addr, warp_id, cycle);
+    m_pf_iew_issued++;
   }
 
-  // 3. IT chain prefetch: DISABLED
-  // Diagnostic finding: IT chain predictions target the NEXT load PC's
-  // address, but GPU kernels execute consecutive loads within 1-2 cycles
-  // (no loop between them). Prefetch needs ~100 cycle L2 round trip,
-  // so IT chain prefetch is always too late. This causes massive useless
-  // prefetch volume (e.g., hotspot: 55K useless, 0% accuracy).
-  // The paper's +7% s-Snake (IaW+IeW only) confirms IT chain is not
-  // the main contributor.
-  // TODO: Re-enable with timeliness filter if deeper chains prove useful.
+  // 3. IT chain prefetch: DISABLED (s-Snake mode)
+  // Empirical finding: IT strides are unstable across loop iterations when
+  // different PCs in the loop have different IaW strides. This causes
+  // massive useless prefetch volume (srad: 1B IT pf, 17% accuracy).
+  // s-Snake (IaW+IeW only) matches paper's reported ~70% accuracy baseline.
 }
 
 // --- Early detection at instruction issue (paper §3.1, Figure 14) ---
@@ -263,33 +289,84 @@ void baseline_snake_prefetcher_t::on_instruction_issue_with_cta(
       entry.warp_confirmed_mask |= (1ULL << warp_id);
       if (entry.training_warp_count() >= m_cfg.training_warps) {
         entry.training_done = true;
+        m_training_completions++;
       }
     }
   }
 
-  // --- IT stride detection (paper §3.1) ---
-  if (tracker != nullptr && tracker->valid && tracker->last_pc != pc) {
-    int prev_ht = find_ht_entry(tracker->last_pc);
-    if (prev_ht >= 0) {
-      update_it_stride(m_ht[prev_ht], tracker->last_addr, pc, addr);
+  // --- Per-warp 2-slot Head Table: IaW direct + IT stride detection ---
+  if (tracker != nullptr) {
+    // Check if this PC is already in one of the warp's slots → IaW (direct)
+    int iaw_slot = -1;
+    for (int s = 0; s < 2; ++s) {
+      if (tracker->slots[s].valid && tracker->slots[s].pc == pc) {
+        iaw_slot = s;
+        break;
+      }
+    }
+
+    if (iaw_slot >= 0) {
+      // IaW: same warp revisiting same PC (loop iteration)
+      int64_t delta = static_cast<int64_t>(addr) -
+                      static_cast<int64_t>(tracker->slots[iaw_slot].addr);
+      if (delta != 0) {
+        // Debug first 5 IaW stride observations on SM0
+        static unsigned s_iaw_learn_count = 0;
+        if (m_sm_id == 0 && s_iaw_learn_count < 5) {
+          printf("SNAKE_LEARN SM0: IaW warp=%u pc=0x%lx old_addr=0x%lx "
+                 "new_addr=0x%lx delta=%ld cycle=%llu\n",
+                 warp_id, (unsigned long)pc,
+                 (unsigned long)tracker->slots[iaw_slot].addr,
+                 (unsigned long)addr, (long)delta, cycle);
+          s_iaw_learn_count++;
+        }
+        if (delta == entry.iaw_stride) {
+          entry.iaw_confirmed = true;
+        } else {
+          entry.iaw_stride = delta;
+          entry.iaw_confirmed = false;
+        }
+      }
+      // Update the slot's addr
+      tracker->slots[iaw_slot].addr = addr;
+    }
+
+    // IT stride detection: from most recent slot (if different PC)
+    if (tracker->slots[0].valid && tracker->slots[0].pc != pc) {
+      int prev_ht = find_ht_entry(tracker->slots[0].pc);
+      if (prev_ht >= 0) {
+        update_it_stride(m_ht[prev_ht], tracker->slots[0].addr, pc, addr);
+      }
+    }
+
+    // Update per-warp tracker: push current (pc, addr) as most recent
+    if (iaw_slot < 0) {
+      // New PC for this warp → shift slots
+      tracker->slots[1] = tracker->slots[0];
+      tracker->slots[0].pc = pc;
+      tracker->slots[0].addr = addr;
+      tracker->slots[0].valid = true;
+    } else {
+      // Existing PC → move it to slot[0] (most recent)
+      if (iaw_slot == 1) {
+        tracker->slots[1] = tracker->slots[0];
+        tracker->slots[0].pc = pc;
+        tracker->slots[0].addr = addr;
+        tracker->slots[0].valid = true;
+      }
+      // If iaw_slot == 0, addr already updated above
     }
   }
 
-  // --- Stride learning ---
-  update_iaw_stride(entry, warp_id, addr);
-  update_iew_stride(entry, warp_id, cta_id, addr);
+  // --- Head Table per-PC slots: IeW detection ---
+  update_head_table_slots(entry, warp_id, addr);
 
   // --- Prefetch generation ---
   if (entry.training_done) {
     generate_prefetches(entry, addr, warp_id, cycle);
   }
 
-  // Update per-warp tracker
-  if (tracker != nullptr) {
-    tracker->last_pc = pc;
-    tracker->last_addr = addr;
-    tracker->valid = true;
-  }
+  // Per-warp tracker is now updated inside the detection section above
 }
 
 // --- L1 access hook (only for demand miss tracking) ---
@@ -310,4 +387,13 @@ void baseline_snake_prefetcher_t::on_demand_load(
 
 void baseline_snake_prefetcher_t::print_stats(FILE *fp) const {
   print_common_stats(fp, "BASELINE_SNAKE");
+  fprintf(fp,
+          "BASELINE_SNAKE_DETAIL SM%u: "
+          "pf_iaw_issued=%u pf_iew_issued=%u pf_it_issued=%u "
+          "it_chain_follows=%u training_completions=%u "
+          "iaw_checks=%u iaw_it_nv=%u iaw_pc_mm=%u iaw_ok=%u\n",
+          m_sm_id, m_pf_iaw_issued, m_pf_iew_issued, m_pf_it_issued,
+          m_it_chain_follows, m_training_completions,
+          m_iaw_accum_checks, m_iaw_it_not_valid, m_iaw_pc_mismatch,
+          m_iaw_accum_ok);
 }

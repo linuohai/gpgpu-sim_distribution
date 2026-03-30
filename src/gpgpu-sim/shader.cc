@@ -3894,7 +3894,7 @@ ldst_unit::ldst_unit(mem_fetch_interface *icnt,
       baseline_snake_config_t scfg;
       scfg.enable = true;
       scfg.ht_size = m_config->baseline_snake_ht_size;
-      scfg.tt_size = m_config->baseline_snake_tt_size;
+
       scfg.training_warps = m_config->baseline_snake_training_warps;
       scfg.max_chain_length = m_config->baseline_snake_max_chain;
       m_baseline = new baseline_snake_prefetcher_t(m_sid, scfg, m_L1D);
@@ -3974,7 +3974,7 @@ ldst_unit::ldst_unit(mem_fetch_interface *icnt,
       baseline_snake_config_t scfg;
       scfg.enable = true;
       scfg.ht_size = m_config->baseline_snake_ht_size;
-      scfg.tt_size = m_config->baseline_snake_tt_size;
+
       scfg.training_warps = m_config->baseline_snake_training_warps;
       scfg.max_chain_length = m_config->baseline_snake_max_chain;
       m_baseline = new baseline_snake_prefetcher_t(m_sid, scfg, m_L1D);

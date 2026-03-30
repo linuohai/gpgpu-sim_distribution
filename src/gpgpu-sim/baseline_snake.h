@@ -9,10 +9,9 @@ class baseline_cache;
 
 struct baseline_snake_config_t {
   bool enable = false;
-  unsigned ht_size = 128;
-  unsigned tt_size = 256;
+  unsigned ht_size = 20;    // paper Table 3: 10, but 20 for multi-kernel apps
   unsigned training_warps = 3;
-  unsigned max_chain_length = 2;  // paper depth controlled by throttle; 2 = conservative
+  unsigned max_chain_length = 2;  // paper depth controlled by throttle
 };
 
 class baseline_snake_prefetcher_t : public baseline_prefetcher_t {
@@ -49,18 +48,24 @@ class baseline_snake_prefetcher_t : public baseline_prefetcher_t {
     bool it_stride_valid = false;   // stride confirmed by ≥2 observations
     unsigned it_observation_count = 0;
 
-    // IaW stride (intra-warp): same warp, same PC, across iterations
-    new_addr_type iaw_last_addr = 0;
+    // --- Head Table slots (paper §3.1, Table 3) ---
+    // Per-PC, store 2 most recent (warp_id, addr) pairs.
+    // "To avoid losing inter-warp strides in the presence of GTO,
+    //  Snake stores information from two different warps per PC_ld."
+    struct warp_slot_t {
+      unsigned warp_id = static_cast<unsigned>(-1);
+      new_addr_type addr = 0;
+      bool valid = false;
+    };
+    warp_slot_t head_slots[2];
+
+    // IaW stride (intra-warp): same warp re-executes same PC
     int64_t iaw_stride = 0;
     bool iaw_confirmed = false;
-    unsigned iaw_last_warp_id = static_cast<unsigned>(-1);
 
-    // IeW stride (inter-warp): different warps within same CTA, same PC
-    new_addr_type iew_last_addr = 0;
+    // IeW stride (inter-warp): different warps execute same PC
     int64_t iew_stride = 0;
     bool iew_confirmed = false;
-    unsigned iew_last_warp_id = static_cast<unsigned>(-1);
-    unsigned iew_last_cta_id = static_cast<unsigned>(-1);
 
     // Training state (paper: warpID vector + T1/T2)
     uint64_t warp_confirmed_mask = 0;
@@ -73,19 +78,22 @@ class baseline_snake_prefetcher_t : public baseline_prefetcher_t {
     unsigned long long last_access_cycle = 0;
   };
 
-  // --- Per-warp tracking for IT chain detection ---
+  // --- Per-warp Head Table (paper §3.1) ---
+  // Store 2 most recent (PC, addr) per warp for IT detection + IaW direct
   struct warp_pc_tracker_t {
-    new_addr_type last_pc = 0;
-    new_addr_type last_addr = 0;
-    bool valid = false;
+    struct slot_t {
+      new_addr_type pc = 0;
+      new_addr_type addr = 0;
+      bool valid = false;
+    };
+    slot_t slots[2];  // 2 slots per warp (paper: "doubling for GTO")
+    // Most recent is slots[0], second is slots[1]
   };
 
   int find_ht_entry(new_addr_type pc) const;
   int alloc_ht_entry(new_addr_type pc, unsigned long long cycle);
-  void update_iaw_stride(ht_entry_t &entry, unsigned warp_id,
-                          new_addr_type addr);
-  void update_iew_stride(ht_entry_t &entry, unsigned warp_id,
-                          unsigned cta_id, new_addr_type addr);
+  void update_head_table_slots(ht_entry_t &entry, unsigned warp_id,
+                                new_addr_type addr);
   void update_it_stride(ht_entry_t &prev_entry, new_addr_type prev_addr,
                          new_addr_type cur_pc, new_addr_type cur_addr);
   void generate_prefetches(const ht_entry_t &entry, new_addr_type addr,
@@ -102,4 +110,22 @@ class baseline_snake_prefetcher_t : public baseline_prefetcher_t {
   // Throttle state (Snake paper §3.3)
   unsigned long long m_throttle_until = 0;
   static constexpr unsigned kThrottlePauseCycles = 50;
+  // Prefetch lookahead: skip nearby (too late) and prefetch further ahead
+  // With GTO, adjacent warps are 1-2 cycles apart; need ~100+ cycle lead
+  // IeW stride=8 → need offset ~20 (20*8=160 bytes ahead ≈ 100+ cycles)
+  static constexpr unsigned kIeWLookahead = 16;  // prefetch 16 strides ahead
+  static constexpr unsigned kIaWLookahead = 1;   // IaW is within same warp, degree=1
+
+  // Per-stride-type diagnostic counters
+  unsigned m_pf_iaw_issued = 0;
+  unsigned m_pf_iew_issued = 0;
+  unsigned m_pf_it_issued = 0;
+  unsigned m_training_completions = 0;
+  unsigned m_it_chain_follows = 0;
+  // IaW accumulation debug counters
+  unsigned m_iaw_accum_checks = 0;    // times IT stride path entered
+  unsigned m_iaw_it_not_valid = 0;    // blocked: IT stride not valid
+  unsigned m_iaw_pc_mismatch = 0;     // blocked: it_next_pc != last_pc
+  unsigned m_iaw_chain_found = 0;     // found via chain following
+  unsigned m_iaw_accum_ok = 0;        // successfully computed IaW
 };
