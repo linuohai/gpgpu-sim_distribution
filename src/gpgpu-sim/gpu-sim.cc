@@ -464,13 +464,14 @@ void shader_core_config::reg_options(class OptionParser *opp) {
                          "SOTA stride baseline prefetch degree", "1");
   option_parser_register(opp, "-baseline_snake_ht_size", OPT_UINT32,
                          &baseline_snake_ht_size,
-                         "Snake tail-table entries per SM", "64");
+                         "Snake merged PC-table entries per SM (paper Head-sized default)",
+                         "32");
   option_parser_register(opp, "-baseline_snake_tt_size", OPT_UINT32,
                          &baseline_snake_tt_size,
-                         "Snake tt entries (legacy, use ht_size)", "10");
+                         "Snake tail-table entries per SM", "10");
   option_parser_register(opp, "-baseline_snake_training_warps", OPT_UINT32,
                          &baseline_snake_training_warps,
-                         "Snake training warp count", "2");
+                         "Snake training warp count", "3");
   option_parser_register(opp, "-baseline_snake_max_chain", OPT_UINT32,
                          &baseline_snake_max_chain,
                          "Snake maximum chain length (paper: 2)", "2");
@@ -499,6 +500,21 @@ void shader_core_config::reg_options(class OptionParser *opp) {
                          &baseline_spare_reg_distance,
                          "Spare Register baseline prefetch distance (1-4)",
                          "1");
+  // CAPS (CTA-Aware Prefetcher) options
+  option_parser_register(opp, "-baseline_caps_enable", OPT_BOOL,
+                         &baseline_caps_enable,
+                         "enable CAPS CTA-aware prefetcher (Koo et al. IPDPS 2018)",
+                         "0");
+  option_parser_register(opp, "-baseline_caps_percta_entries", OPT_UINT32,
+                         &baseline_caps_percta_entries,
+                         "CAPS PerCTA table entries per CTA (paper: 4)", "4");
+  option_parser_register(opp, "-baseline_caps_dist_entries", OPT_UINT32,
+                         &baseline_caps_dist_entries,
+                         "CAPS DIST table entries per SM (paper: 4)", "4");
+  option_parser_register(opp, "-baseline_caps_mispredict_threshold", OPT_UINT32,
+                         &baseline_caps_mispredict_threshold,
+                         "CAPS misprediction counter threshold (paper: 128)",
+                         "128");
   // GRASP prefetcher options
   option_parser_register(opp, "-grasp_enable", OPT_BOOL, &grasp_enable,
                          "enable GRASP IMA prefetcher", "0");
@@ -1946,7 +1962,8 @@ void gpgpu_sim::gpu_print_stat(unsigned long long streamID) {
   if (m_shader_config->grasp_enable || m_shader_config->baseline_intra_enable ||
       m_shader_config->baseline_inter_enable ||
       m_shader_config->baseline_snake_enable ||
-      m_shader_config->baseline_spare_reg_enable) {
+      m_shader_config->baseline_spare_reg_enable ||
+      m_shader_config->baseline_caps_enable) {
     printf("\n========= Prefetcher Stats =========\n");
     for (unsigned i = 0; i < m_config.num_cluster(); i++) {
       m_cluster[i]->print_grasp_stats(stdout);

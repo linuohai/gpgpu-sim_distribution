@@ -34,6 +34,7 @@
 #include "baseline_stride.h"
 #include "baseline_snake.h"
 #include "baseline_spare_reg.h"
+#include "baseline_caps.h"
 #include <algorithm>
 #include <cctype>
 #include <fstream>
@@ -1186,6 +1187,10 @@ void shader_core_ctx::init_warps(unsigned cta_id, unsigned start_thread,
       m_warp_cta_uid[i] = ctaid;
       m_warp[i]->init(start_pc, cta_id, i, active_threads, m_dynamic_warp_id,
                       kernel.get_streamID());
+      // PAS: mark first warp of each CTA as "leading warp" for scheduling
+      // priority when CAPS is enabled.
+      m_warp[i]->set_leading_warp(i == start_warp &&
+                                   m_config->baseline_caps_enable);
       ++m_dynamic_warp_id;
       m_not_completed += n_active;
       ++m_active_warps;
@@ -1989,6 +1994,21 @@ void scheduler_unit::cycle() {
       };
 
   order_warps();
+
+  // PAS (Prefetch-Aware Scheduler): when CAPS is enabled, move leading warps
+  // to the front of the ready queue so base addresses are computed early.
+  if (m_shader->get_config()->baseline_caps_enable) {
+    std::vector<shd_warp_t *> reordered;
+    reordered.reserve(m_next_cycle_prioritized_warps.size());
+    for (auto *w : m_next_cycle_prioritized_warps) {
+      if (w != nullptr && w->is_leading_warp()) reordered.push_back(w);
+    }
+    for (auto *w : m_next_cycle_prioritized_warps) {
+      if (w == nullptr || !w->is_leading_warp()) reordered.push_back(w);
+    }
+    m_next_cycle_prioritized_warps = std::move(reordered);
+  }
+
   for (std::vector<shd_warp_t *>::const_iterator iter =
            m_next_cycle_prioritized_warps.begin();
        iter != m_next_cycle_prioritized_warps.end(); iter++) {
@@ -3875,7 +3895,8 @@ ldst_unit::ldst_unit(mem_fetch_interface *icnt,
   } else if ((m_config->baseline_intra_enable ||
               m_config->baseline_inter_enable ||
               m_config->baseline_snake_enable ||
-              m_config->baseline_spare_reg_enable) &&
+              m_config->baseline_spare_reg_enable ||
+              m_config->baseline_caps_enable) &&
              m_L1D != nullptr) {
     if (m_config->baseline_intra_enable || m_config->baseline_inter_enable) {
       baseline_stride_config_t cfg;
@@ -3893,7 +3914,12 @@ ldst_unit::ldst_unit(mem_fetch_interface *icnt,
     } else if (m_config->baseline_snake_enable) {
       baseline_snake_config_t scfg;
       scfg.enable = true;
-      scfg.ht_size = m_config->baseline_snake_ht_size;
+      // Current Snake implementation still uses one merged PC-indexed table.
+      // It should therefore honor the head-sized capacity knob, not the
+      // 10-entry Tail-table knob that exists for future paper-faithful split.
+      scfg.ht_size = m_config->baseline_snake_ht_size != 0
+                         ? m_config->baseline_snake_ht_size
+                         : m_config->baseline_snake_tt_size;
 
       scfg.training_warps = m_config->baseline_snake_training_warps;
       scfg.max_chain_length = m_config->baseline_snake_max_chain;
@@ -3903,6 +3929,12 @@ ldst_unit::ldst_unit(mem_fetch_interface *icnt,
       rcfg.training_iter = m_config->baseline_spare_reg_training_iter;
       rcfg.distance = m_config->baseline_spare_reg_distance;
       m_baseline = new baseline_spare_reg_prefetcher_t(m_sid, rcfg);
+    } else if (m_config->baseline_caps_enable) {
+      caps_config_t ccfg;
+      ccfg.percta_entries = m_config->baseline_caps_percta_entries;
+      ccfg.dist_entries = m_config->baseline_caps_dist_entries;
+      ccfg.mispredict_threshold = m_config->baseline_caps_mispredict_threshold;
+      m_baseline = new baseline_caps_prefetcher_t(m_sid, ccfg);
     }
   } else if (m_config->gpgpu_ima_prefetch_enable && m_L1D != nullptr) {
     // Legacy IMA mode
@@ -3955,7 +3987,8 @@ ldst_unit::ldst_unit(mem_fetch_interface *icnt,
   } else if ((m_config->baseline_intra_enable ||
               m_config->baseline_inter_enable ||
               m_config->baseline_snake_enable ||
-              m_config->baseline_spare_reg_enable) &&
+              m_config->baseline_spare_reg_enable ||
+              m_config->baseline_caps_enable) &&
              m_L1D != nullptr) {
     if (m_config->baseline_intra_enable || m_config->baseline_inter_enable) {
       baseline_stride_config_t cfg;
@@ -3973,7 +4006,9 @@ ldst_unit::ldst_unit(mem_fetch_interface *icnt,
     } else if (m_config->baseline_snake_enable) {
       baseline_snake_config_t scfg;
       scfg.enable = true;
-      scfg.ht_size = m_config->baseline_snake_ht_size;
+      scfg.ht_size = m_config->baseline_snake_ht_size != 0
+                         ? m_config->baseline_snake_ht_size
+                         : m_config->baseline_snake_tt_size;
 
       scfg.training_warps = m_config->baseline_snake_training_warps;
       scfg.max_chain_length = m_config->baseline_snake_max_chain;
@@ -3983,6 +4018,12 @@ ldst_unit::ldst_unit(mem_fetch_interface *icnt,
       rcfg.training_iter = m_config->baseline_spare_reg_training_iter;
       rcfg.distance = m_config->baseline_spare_reg_distance;
       m_baseline = new baseline_spare_reg_prefetcher_t(m_sid, rcfg);
+    } else if (m_config->baseline_caps_enable) {
+      caps_config_t ccfg;
+      ccfg.percta_entries = m_config->baseline_caps_percta_entries;
+      ccfg.dist_entries = m_config->baseline_caps_dist_entries;
+      ccfg.mispredict_threshold = m_config->baseline_caps_mispredict_threshold;
+      m_baseline = new baseline_caps_prefetcher_t(m_sid, ccfg);
     }
   } else if (m_config->gpgpu_ima_prefetch_enable && m_L1D != nullptr) {
     m_ima_prefetcher = new ima_prefetcher_t(

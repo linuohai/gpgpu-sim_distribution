@@ -15,6 +15,16 @@ list(APPEND gpgpusim_SRC addrdec.cc
     l2_bw_tracer.cc
     l2_tracer.cc
     l2cache.cc
+    baseline_prefetcher.cc
+    baseline_stride.cc
+    baseline_snake.cc
+    baseline_spare_reg.cc
+    baseline_caps.cc
+    grasp_prefetcher.cc
+    grasp_chain_detector.cc
+    grasp_tables.cc
+    grasp_tracer.cc
+    ima_prefetcher.cc
     stall_reason_pc_stats.cc
     local_interconnect.cc
     mem_fetch.cc

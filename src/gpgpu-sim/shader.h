@@ -320,6 +320,12 @@ class shd_warp_t {
   unsigned long long get_streamID() const { return m_streamID; }
   unsigned get_cta_id() const { return m_cta_id; }
 
+  // PAS (Prefetch-Aware Scheduler): one-bit leading warp marker.
+  // The first warp of each CTA is the "leading warp" and gets scheduling
+  // priority so that CTA base addresses are computed early.
+  bool is_leading_warp() const { return m_is_leading_warp; }
+  void set_leading_warp(bool v) { m_is_leading_warp = v; }
+
   unsigned get_dynamic_warp_id() const { return m_dynamic_warp_id; }
   unsigned get_warp_id() const { return m_warp_id; }
 
@@ -366,6 +372,8 @@ class shd_warp_t {
   unsigned m_stores_outstanding;  // number of store requests sent but not yet
                                   // acknowledged
   unsigned m_inst_in_pipeline;
+
+  bool m_is_leading_warp = false;  // PAS: leading warp marker
 
   // Jin: cdp support
  public:
@@ -1787,6 +1795,11 @@ class shader_core_config : public core_config {
   unsigned baseline_spare_reg_training_iter;
   unsigned baseline_spare_reg_use_l1d;
   unsigned baseline_spare_reg_distance;
+  // CAPS (CTA-Aware Prefetcher) configuration
+  bool baseline_caps_enable;
+  unsigned baseline_caps_percta_entries;
+  unsigned baseline_caps_dist_entries;
+  unsigned baseline_caps_mispredict_threshold;
   // GRASP prefetcher configuration
   bool grasp_enable;
   bool grasp_debug;
