@@ -1971,6 +1971,35 @@ void gpgpu_sim::gpu_print_stat(unsigned long long streamID) {
     printf("===================================\n");
   }
 
+  // IMA demand tracking — aggregated across all SMs (works for all prefetchers)
+  {
+    unsigned long long ir = 0, ih_i = 0, ihr_i = 0, im = 0;
+    unsigned long long dr = 0, ih_d = 0, ihr_d = 0, dm = 0;
+    for (unsigned i = 0; i < m_config.num_cluster(); i++) {
+      unsigned long long cir, cih, cihr, cim, cdr, cdh, cdhr, cdm;
+      m_cluster[i]->get_ima_demand_stats_detail(cir, cih, cihr, cim,
+                                                 cdr, cdh, cdhr, cdm);
+      ir += cir; ih_i += cih; ihr_i += cihr; im += cim;
+      dr += cdr; ih_d += cdh; ihr_d += cdhr; dm += cdm;
+    }
+    unsigned long long tr = ir + dr, tm = im + dm;
+    if (tr > 0) {
+      printf("IMA_DEMAND: total_reads=%llu total_misses=%llu "
+             "index_reads=%llu index_hits=%llu index_hit_reserved=%llu "
+             "index_misses=%llu "
+             "data_reads=%llu data_hits=%llu data_hit_reserved=%llu "
+             "data_misses=%llu\n",
+             tr, tm, ir, ih_i, ihr_i, im, dr, ih_d, ihr_d, dm);
+      unsigned long long idx_a = ih_i + ihr_i, data_a = ih_d + ihr_d;
+      if (idx_a > 0)
+        printf("IMA_TIMELINESS: index=%.2f%%", 100.0 * ih_i / idx_a);
+      if (data_a > 0)
+        printf(" data=%.2f%%", 100.0 * ih_d / data_a);
+      if (idx_a > 0 || data_a > 0)
+        printf("\n");
+    }
+  }
+
   m_shader_stats->print(stdout);
 #ifdef GPGPUSIM_POWER_MODEL
   if (m_config.g_power_simulation_enabled) {

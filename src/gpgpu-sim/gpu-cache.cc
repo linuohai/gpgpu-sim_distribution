@@ -2144,7 +2144,8 @@ enum cache_request_status l1_cache::access(new_addr_type addr, mem_fetch *mf,
                   total_alu, active_sp, total_sp, active_int, total_int,
                   active_dp, total_dp, active_sfu, total_sfu, active_tensor,
                   total_tensor);
-                
+
+  m_last_probe_status = probe_status;
   return status;
 }
 

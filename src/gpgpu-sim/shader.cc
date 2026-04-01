@@ -3246,6 +3246,35 @@ void ldst_unit::L1_latency_queue_cycle() {
         unsigned long long cycle = m_core->get_gpu()->gpu_sim_cycle +
                                    m_core->get_gpu()->gpu_tot_sim_cycle;
         shd_warp_t *warp = m_core->get_warp_ptr(mf_next->get_wid());
+
+        // IMA demand load tracking (works in GRASP, baseline, and NP mode)
+        // Uses chain CSV PC identification; tracks HIT/HIT_RESERVED/MISS
+        // per index/data for timeliness & coverage computation.
+        // IMPORTANT: use last_probe_status() (not access() return value)
+        // because access() converts HIT_RESERVED to MISS for core perspective.
+        enum cache_request_status probe = m_L1D->last_probe_status();
+        if (status != RESERVATION_FAIL && warp != NULL) {
+          address_type pc =
+              static_cast<address_type>(mf_next->get_pc());
+          if (warp->is_ima_index_pc(pc)) {
+            ++m_ima_index_reads;
+            if (probe == HIT)
+              ++m_ima_index_hits;
+            else if (probe == HIT_RESERVED)
+              ++m_ima_index_hit_reserved;
+            else
+              ++m_ima_index_misses;
+          } else if (warp->is_ima_data_pc(pc)) {
+            ++m_ima_data_reads;
+            if (probe == HIT)
+              ++m_ima_data_hits;
+            else if (probe == HIT_RESERVED)
+              ++m_ima_data_hit_reserved;
+            else
+              ++m_ima_data_misses;
+          }
+        }
+
         if (m_grasp) {
           // GRASP mode: delegate to grasp_prefetcher_t
           m_grasp->on_demand_load(mf_next->get_wid(), mf_next->get_pc(),
@@ -5814,6 +5843,21 @@ void shader_core_ctx::print_grasp_stats(FILE *fp) const {
   }
 }
 
+void shader_core_ctx::get_ima_demand_stats_detail(
+    unsigned long long &idx_reads, unsigned long long &idx_hits,
+    unsigned long long &idx_hit_reserved, unsigned long long &idx_misses,
+    unsigned long long &data_reads, unsigned long long &data_hits,
+    unsigned long long &data_hit_reserved, unsigned long long &data_misses) const {
+  idx_reads = m_ldst_unit->get_ima_index_reads();
+  idx_hits = m_ldst_unit->get_ima_index_hits();
+  idx_hit_reserved = m_ldst_unit->get_ima_index_hit_reserved();
+  idx_misses = m_ldst_unit->get_ima_index_misses();
+  data_reads = m_ldst_unit->get_ima_data_reads();
+  data_hits = m_ldst_unit->get_ima_data_hits();
+  data_hit_reserved = m_ldst_unit->get_ima_data_hit_reserved();
+  data_misses = m_ldst_unit->get_ima_data_misses();
+}
+
 void shader_core_ctx::get_cache_stats(cache_stats &cs) {
   // Adds stats from each cache to 'cs'
   cs += m_L1I->get_stats();          // Get L1I stats
@@ -6610,6 +6654,21 @@ void simt_core_cluster::print_cache_stats(FILE *fp, unsigned &dl1_accesses,
 void simt_core_cluster::print_grasp_stats(FILE *fp) const {
   for (unsigned i = 0; i < m_config->n_simt_cores_per_cluster; ++i) {
     m_core[i]->print_grasp_stats(fp);
+  }
+}
+
+void simt_core_cluster::get_ima_demand_stats_detail(
+    unsigned long long &idx_reads, unsigned long long &idx_hits,
+    unsigned long long &idx_hit_reserved, unsigned long long &idx_misses,
+    unsigned long long &data_reads, unsigned long long &data_hits,
+    unsigned long long &data_hit_reserved, unsigned long long &data_misses) const {
+  idx_reads = idx_hits = idx_hit_reserved = idx_misses = 0;
+  data_reads = data_hits = data_hit_reserved = data_misses = 0;
+  for (unsigned i = 0; i < m_config->n_simt_cores_per_cluster; ++i) {
+    unsigned long long ir, ih, ihr, im, dr, dh, dhr, dm;
+    m_core[i]->get_ima_demand_stats_detail(ir, ih, ihr, im, dr, dh, dhr, dm);
+    idx_reads += ir; idx_hits += ih; idx_hit_reserved += ihr; idx_misses += im;
+    data_reads += dr; data_hits += dh; data_hit_reserved += dhr; data_misses += dm;
   }
 }
 

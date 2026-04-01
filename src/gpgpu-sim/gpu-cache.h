@@ -1729,6 +1729,12 @@ class l1_cache : public data_cache {
                                            unsigned time,
                                            std::list<cache_event> &events);
 
+  // Probe status from the tag_array (before access() converts HIT_RESERVED
+  // to MISS for the core perspective).  Used by IMA demand tracking.
+  enum cache_request_status last_probe_status() const {
+    return m_last_probe_status;
+  }
+
  protected:
   l1_cache(const char *name, cache_config &config, int core_id, int type_id,
            mem_fetch_interface *memport, mem_fetch_allocator *mfcreator,
@@ -1736,6 +1742,8 @@ class l1_cache : public data_cache {
            class gpgpu_sim *gpu)
       : data_cache(name, config, core_id, type_id, memport, mfcreator, status,
                    new_tag_array, L1_WR_ALLOC_R, L1_WRBK_ACC, gpu) {}
+
+  enum cache_request_status m_last_probe_status = RESERVATION_FAIL;
 };
 
 /// Models second level shared cache with global write-back
