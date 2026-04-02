@@ -283,11 +283,10 @@ void grasp_prefetcher_t::load_stride_hints(const char *csv_path) {
 // Lifecycle
 // ---------------------------------------------------------------------------
 
-void grasp_prefetcher_t::on_kernel_launch(const void *kernel_entry) {
-  bool same_kernel = (kernel_entry != nullptr &&
-                      kernel_entry == m_last_kernel_entry);
-  m_last_kernel_entry = kernel_entry;
-
+void grasp_prefetcher_t::on_kernel_launch(const std::string &kernel_name) {
+  bool same_kernel = (!kernel_name.empty() &&
+                      kernel_name == m_last_kernel_name);
+  m_last_kernel_name = kernel_name;
   // CD always reset (warp assignments change across launches)
   m_cd.reset();
 
@@ -457,7 +456,19 @@ void grasp_prefetcher_t::on_demand_load(unsigned warp_id, new_addr_type pc,
 
   // Check if this PC is an IMA index load (registered in CT by CD)
   int ct_idx = m_ct.find(pc);
-  if (ct_idx < 0) return;  // Not an IMA load — skip
+  if (ct_idx < 0) {
+    // Trace CT miss for known IMA PCs (helps debug late chain detection)
+    if (grasp_tracer::enabled() && warp != nullptr &&
+        !warp->get_ima_seed_chain_ids(static_cast<address_type>(pc)).empty()) {
+      char det[128];
+      snprintf(det, sizeof(det), "pc=0x%x;reason=CT_NOT_FOUND",
+               (unsigned)pc);
+      grasp_tracer::emit(m_sm_id, warp_id, cycle, "DEMAND_CT_MISS",
+                         (unsigned long long)pc, (unsigned long long)addr,
+                         det);
+    }
+    return;
+  }
 
   // IMA-specific demand load tracking (accuracy/coverage/timeliness denominator)
   ++m_stats.ima_demand_reads;

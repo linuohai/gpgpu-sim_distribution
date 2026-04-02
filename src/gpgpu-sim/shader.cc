@@ -1135,8 +1135,7 @@ void shader_core_ctx::init_warps(unsigned cta_id, unsigned start_thread,
                                  int cta_size, kernel_info_t &kernel) {
   // Hook 6: GRASP kernel launch — reset or preserve state based on kernel identity
   if (m_ldst_unit && m_ldst_unit->grasp_enabled() && ctaid == 0) {
-    m_ldst_unit->grasp()->on_kernel_launch(
-        static_cast<const void *>(kernel.entry()));
+    m_ldst_unit->grasp()->on_kernel_launch(kernel.get_name());
   }
   address_type start_pc = next_pc(start_thread);
   unsigned kernel_id = kernel.get_uid();

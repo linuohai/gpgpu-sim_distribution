@@ -25,6 +25,8 @@ class l1_tracer {
                    unsigned active_tensor_lanes, unsigned total_tensor_lanes);
   static void emit_fill(unsigned sid, unsigned wid, const mem_fetch *mf,
                         unsigned long long cycle, unsigned line_sz);
+  static void emit_evict(unsigned sid, unsigned long long cycle,
+                         new_addr_type evicted_addr, bool was_dirty);
   static void flush_all();
 
  private:

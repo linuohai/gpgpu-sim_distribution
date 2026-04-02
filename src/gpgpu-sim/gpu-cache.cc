@@ -1387,8 +1387,11 @@ void baseline_cache::send_read_request(new_addr_type addr,
 
     if (read_only)
       m_tag_array->access(block_addr, time, cache_index, mf);
-    else
+    else {
       m_tag_array->access(block_addr, time, cache_index, wb, evicted, mf);
+      if (evicted.m_block_addr != 0)
+        l1_tracer::emit_evict(mf->get_sid(), time, evicted.m_block_addr, wb);
+    }
 
     m_mshrs.add(mshr_addr, mf);
     m_stats.inc_stats(mf->get_access_type(), MSHR_HIT, mf->get_streamID());
@@ -1398,8 +1401,11 @@ void baseline_cache::send_read_request(new_addr_type addr,
              (m_miss_queue.size() < m_config.m_miss_queue_size)) {
     if (read_only)
       m_tag_array->access(block_addr, time, cache_index, mf);
-    else
+    else {
       m_tag_array->access(block_addr, time, cache_index, wb, evicted, mf);
+      if (evicted.m_block_addr != 0)
+        l1_tracer::emit_evict(mf->get_sid(), time, evicted.m_block_addr, wb);
+    }
 
     m_mshrs.add(mshr_addr, mf);
     m_extra_mf_fields[mf] = extra_mf_fields(

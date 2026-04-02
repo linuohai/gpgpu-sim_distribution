@@ -26,12 +26,23 @@ grasp_chain_detector_t::grasp_chain_detector_t(unsigned fifo_depth)
 
 void grasp_chain_detector_t::push(const fifo_entry_t &entry) {
   if (m_count >= m_depth) {
-    // FIFO full: overwrite oldest entry
-    ++m_stats.fifo_drop_count;
-    m_fifo[m_head] = entry;
-    m_head = (m_head + 1) % m_depth;
-    // m_tail advances to next slot
-    m_tail = (m_tail + 1) % m_depth;
+    // FIFO logically full: try to reclaim an invalid slot first
+    bool reclaimed = false;
+    for (unsigned i = 0; i < m_depth; ++i) {
+      unsigned idx = (m_head + i) % m_depth;
+      if (!m_fifo[idx].valid) {
+        m_fifo[idx] = entry;
+        reclaimed = true;
+        break;
+      }
+    }
+    if (!reclaimed) {
+      // All slots truly valid: overwrite oldest
+      ++m_stats.fifo_drop_count;
+      m_fifo[m_head] = entry;
+      m_head = (m_head + 1) % m_depth;
+      m_tail = (m_tail + 1) % m_depth;
+    }
     // count stays at m_depth
   } else {
     // Write Invalidation: if new entry's dst_reg matches an existing entry,

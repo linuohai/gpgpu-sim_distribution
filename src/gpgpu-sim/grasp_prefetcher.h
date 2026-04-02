@@ -254,7 +254,7 @@ class grasp_prefetcher_t {
   ~grasp_prefetcher_t();
 
   // Kernel switch: clear or partially preserve state
-  void on_kernel_launch(const void *kernel_entry = nullptr);
+  void on_kernel_launch(const std::string &kernel_name);
 
   // Warp exit: clean tracked warp state
   void on_warp_exit(unsigned warp_id);
@@ -354,7 +354,7 @@ class grasp_prefetcher_t {
   l1_cache *m_l1d = nullptr;
 
   // Cross-kernel CT persistence
-  const void *m_last_kernel_entry = nullptr;
+  std::string m_last_kernel_name;
 
   // Helpers
   void queue_prefetch(new_addr_type addr, unsigned warp_id,

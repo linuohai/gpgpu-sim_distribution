@@ -246,6 +246,35 @@ void l1_tracer::emit_fill(unsigned sid, unsigned wid, const mem_fetch *mf,
   }
 }
 
+void l1_tracer::emit_evict(unsigned sid, unsigned long long cycle,
+                           new_addr_type evicted_addr, bool was_dirty) {
+  if (!s_enabled) return;
+  if (sid >= s_buffers.size()) return;
+
+  std::ostringstream oss;
+  oss << cycle << ',' << sid << ",0,0,EVICT,NA,";
+  oss << "0x" << std::hex << evicted_addr << std::dec;
+  oss << ",EVICT,NA,0,NONE";
+  if (s_print_bw) {
+    oss << ",0.000000,0.000000";
+  }
+  if (s_print_compute) {
+    oss << ",0,0,0.000000";
+    oss << ",0,0,0.000000";
+    oss << ",0,0,0.000000";
+    oss << ",0,0,0.000000";
+    oss << ",0,0,0.000000";
+    oss << ",0,0,0.000000";
+  }
+  oss << '\n';
+
+  std::string &buffer = s_buffers[sid];
+  buffer.append(oss.str());
+  if (buffer.size() >= s_flush_threshold) {
+    flush_sid(sid);
+  }
+}
+
 void l1_tracer::flush_all() {
   if (!s_enabled) return;
   for (unsigned sid = 0; sid < s_buffers.size(); ++sid) {
