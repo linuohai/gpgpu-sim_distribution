@@ -231,6 +231,8 @@ class shd_warp_t {
     (void)pc;
     return std::vector<unsigned>();
   }
+  virtual bool is_ima_index_pc(address_type pc) { (void)pc; return false; }
+  virtual bool is_ima_data_pc(address_type pc) { (void)pc; return false; }
   virtual std::vector<ima_prefetch_candidate_t> lookup_ima_prefetch_candidates(
       new_addr_type request_addr, const std::vector<unsigned> &seed_chain_ids,
       bool exact_match_only = false) {
@@ -1501,6 +1503,23 @@ class ldst_unit : public pipelined_simd_unit {
     }
   }
 
+  // IMA demand load tracking (works in both baseline and GRASP mode)
+  // Per-type: reads = hits + hit_reserved + misses
+  unsigned long long m_ima_index_reads = 0, m_ima_index_misses = 0;
+  unsigned long long m_ima_index_hits = 0, m_ima_index_hit_reserved = 0;
+  unsigned long long m_ima_data_reads = 0, m_ima_data_misses = 0;
+  unsigned long long m_ima_data_hits = 0, m_ima_data_hit_reserved = 0;
+  unsigned long long get_ima_demand_reads() const { return m_ima_index_reads + m_ima_data_reads; }
+  unsigned long long get_ima_demand_misses() const { return m_ima_index_misses + m_ima_data_misses; }
+  unsigned long long get_ima_index_reads() const { return m_ima_index_reads; }
+  unsigned long long get_ima_index_misses() const { return m_ima_index_misses; }
+  unsigned long long get_ima_index_hits() const { return m_ima_index_hits; }
+  unsigned long long get_ima_index_hit_reserved() const { return m_ima_index_hit_reserved; }
+  unsigned long long get_ima_data_reads() const { return m_ima_data_reads; }
+  unsigned long long get_ima_data_misses() const { return m_ima_data_misses; }
+  unsigned long long get_ima_data_hits() const { return m_ima_data_hits; }
+  unsigned long long get_ima_data_hit_reserved() const { return m_ima_data_hit_reserved; }
+
   // IMA prefetcher: drain one pending prefetch per cycle into L1D.
   void inject_ima_prefetches(unsigned long long cycle);
   void queue_ima_prefetch_request(new_addr_type addr, unsigned warp_id,
@@ -1780,6 +1799,9 @@ class shader_core_config : public core_config {
   unsigned grasp_ist_confidence;
   unsigned grasp_prb_capacity;
   unsigned grasp_tc_mshr_threshold;
+  unsigned grasp_pair_table_scope;  // 0=per-warp, 1=per-CTA, 2=per-kernel
+  char *grasp_pair_table_dump_path;  // CSV dump of pair table addr_map (empty=disabled)
+  int grasp_speculative_stride;  // speculative stride on first obs (0=disabled)
   bool gpgpu_clock_gated_reg_file;
   bool gpgpu_clock_gated_lanes;
   enum divergence_support_t model;
@@ -2334,6 +2356,13 @@ class shader_core_ctx : public core_t {
                          unsigned &dl1_misses);
   void print_grasp_stats(FILE *fp) const;
   void print_grasp_config(FILE *fp) const;
+  void get_ima_demand_stats(unsigned long long &reads,
+                            unsigned long long &misses) const;
+  void get_ima_demand_stats_detail(
+      unsigned long long &idx_reads, unsigned long long &idx_hits,
+      unsigned long long &idx_hit_reserved, unsigned long long &idx_misses,
+      unsigned long long &data_reads, unsigned long long &data_hits,
+      unsigned long long &data_hit_reserved, unsigned long long &data_misses) const;
 
   void get_cache_stats(cache_stats &cs);
   void get_L1I_sub_stats(struct cache_sub_stats &css) const;
@@ -2889,6 +2918,13 @@ class simt_core_cluster {
                          unsigned &dl1_misses) const;
   void print_grasp_stats(FILE *fp) const;
   void print_grasp_config(FILE *fp) const;
+  void get_ima_demand_stats(unsigned long long &reads,
+                            unsigned long long &misses) const;
+  void get_ima_demand_stats_detail(
+      unsigned long long &idx_reads, unsigned long long &idx_hits,
+      unsigned long long &idx_hit_reserved, unsigned long long &idx_misses,
+      unsigned long long &data_reads, unsigned long long &data_hits,
+      unsigned long long &data_hit_reserved, unsigned long long &data_misses) const;
 
   void get_cache_stats(cache_stats &cs) const;
   void get_L1I_sub_stats(struct cache_sub_stats &css) const;

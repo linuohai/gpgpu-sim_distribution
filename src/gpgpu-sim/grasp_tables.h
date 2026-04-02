@@ -31,6 +31,8 @@ struct ct_entry_t {
   // When ANY warp visits a second time, stride is computed from its own delta.
   int64_t iter_stride = 0;
   bool stride_valid = false;
+  bool stride_speculative = false;  // true = stride is a guess, awaiting confirmation
+  int64_t speculative_stride_hint = 0;  // per-entry hint (from index LDG data_size)
   static constexpr unsigned MAX_STRIDE_OBS = 16;
   struct stride_obs_t {
     unsigned warp_id = (unsigned)-1;
@@ -62,7 +64,8 @@ struct tt_entry_t {
 
 class grasp_chain_table_t {
  public:
-  explicit grasp_chain_table_t(unsigned num_entries);
+  explicit grasp_chain_table_t(unsigned num_entries,
+                               int64_t speculative_stride = 0);
 
   // Find PC's entry, return index or -1
   int find(new_addr_type index_pc) const;
@@ -106,6 +109,7 @@ class grasp_chain_table_t {
  private:
   std::vector<ct_entry_t> m_entries;
   ct_stats_t m_stats;
+  int64_t m_speculative_stride = 0;  // 0=disabled, >0 = assumed stride on 1st obs
   int find_victim() const;  // prefer stride_valid=false, then LRU
   void update_peak_occupancy();
 };

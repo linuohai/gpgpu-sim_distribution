@@ -102,27 +102,33 @@ bool grasp_chain_detector_t::on_instruction_issue(
     const std::string &sass_opcode, int dst_reg, const int *src_regs,
     unsigned num_src_regs, unsigned long long cycle,
     new_addr_type first_lane_addr, unsigned first_lane_id,
+    unsigned data_size,
     detected_chain_t *out_chain) {
   // C7: if training is frozen, skip all FIFO operations
   if (m_training_frozen) return false;
 
+  // P4: Use sass_opcode to identify LDG, not op == LOAD_OP.
+  // LOAD_OP includes ATOM instructions (ATOMG, ATOM, RED) which are not
+  // valid IMA data loads and must be excluded from chain detection.
+  bool is_ldg = (sass_opcode.find("LDG") != std::string::npos);
+
   // Tracked warp selection: first 2 LDGs from different warps become tracked
   if (m_tracked_warp_ids[0] == UNSET_WARP) {
-    if (op == LOAD_OP) {
+    if (is_ldg) {
       m_tracked_warp_ids[0] = warp_id;
     } else {
       return false;
     }
   } else if (m_tracked_warp_ids[1] == UNSET_WARP &&
-             warp_id != m_tracked_warp_ids[0] && op == LOAD_OP) {
+             warp_id != m_tracked_warp_ids[0] && is_ldg) {
     m_tracked_warp_ids[1] = warp_id;
   }
 
   // Only process tracked warps
   if (!is_tracked_warp(warp_id)) return false;
 
-  // Check if this is a load instruction (LDG)
-  bool is_load = (op == LOAD_OP);
+  // Check if this is a load instruction (LDG, not ATOM)
+  bool is_load = is_ldg;
 
   // Check if this is IMAD.WIDE (address computation for IMA)
   bool is_imad_wide =
@@ -142,6 +148,7 @@ bool grasp_chain_detector_t::on_instruction_issue(
           out_chain->base_placeholder = producer->base;
           out_chain->index_addr = producer->index_addr;
           out_chain->index_lane_id = producer->index_lane_id;
+          out_chain->index_data_size = producer->data_size;
         }
         ++m_stats.chains_detected;
         // Track unique index PCs for CT coverage metric
@@ -160,6 +167,7 @@ bool grasp_chain_detector_t::on_instruction_issue(
           entry.pc = pc;
           entry.addr = first_lane_addr;
           entry.lane_id = first_lane_id;
+          entry.data_size = data_size;
           push(entry);
         }
         return true;
@@ -175,6 +183,7 @@ bool grasp_chain_detector_t::on_instruction_issue(
       entry.pc = pc;
       entry.addr = first_lane_addr;
       entry.lane_id = first_lane_id;
+      entry.data_size = data_size;
       push(entry);
     }
   } else if (is_imad_wide) {
@@ -194,6 +203,7 @@ bool grasp_chain_detector_t::on_instruction_issue(
           entry.index_pc = producer->pc;  // PC of the index load
           entry.index_addr = producer->addr;  // address of the index load
           entry.index_lane_id = producer->lane_id;
+          entry.data_size = producer->data_size;  // propagate index LDG width
           entry.scale = 0;  // placeholder in trace-driven mode
           entry.base = 0;   // placeholder in trace-driven mode
           push(entry);

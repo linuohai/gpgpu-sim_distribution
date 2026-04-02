@@ -95,8 +95,6 @@ void l1_tracer::emit(unsigned sid, unsigned wid, const mem_fetch *mf,
                      unsigned active_tensor_lanes, unsigned total_tensor_lanes) {
   if (!s_enabled || !mf) return;
   if (sid >= s_buffers.size()) return;
-  const std::vector<std::pair<unsigned, addr_t>> &lanes = mf->dbg_lanes();
-  if (lanes.empty()) return;
 
   const char *status_name = cache_request_status_str(status);
   const char *op = mf->dbg_is_store() ? "ST" : "LD";
@@ -143,55 +141,48 @@ void l1_tracer::emit(unsigned sid, unsigned wid, const mem_fetch *mf,
     tensor_util_str = util_string(active_tensor_lanes, total_tensor_lanes);
   }
 
-  std::unordered_set<addr_t> seen_lines;
-  seen_lines.reserve(lanes.size());
-
-  for (const auto &entry : lanes) {
-    addr_t line_addr = entry.second;
-    if (line_sz) {
-      line_addr = entry.second &
-                  ~static_cast<addr_t>(static_cast<addr_t>(line_sz) - 1);
-    }
-    if (!seen_lines.insert(line_addr).second) continue;
-
-    oss << cycle << ',' << sid << ',' << wid << ',' << entry.first << ',' << op
-        << ',' << space << ',';
-    oss << "0x" << std::hex << entry.second << std::dec << ',' << status_name
-        << ',';
-    if (has_pc) {
-      oss << "0x" << std::hex << pc << std::dec;
-    } else {
-      oss << "NA";
-    }
-    // Prefetch tagging columns
-    {
-      bool is_pf = mf->is_ima_prefetch();
-      oss << ',' << (is_pf ? 1 : 0) << ',';
-      switch (mf->get_ima_kind()) {
-        case IMA_PREFETCH_INDEX: oss << "INDEX"; break;
-        case IMA_PREFETCH_DATA:  oss << "DATA";  break;
-        default:                 oss << "NONE";  break;
-      }
-    }
-    if (s_print_bw) {
-      oss << ',' << bw_str << ',' << occ_str;
-    }
-    if (s_print_compute) {
-      oss << ',' << active_alu_lanes << ',' << total_alu_lanes << ','
-          << alu_util_str;
-      oss << ',' << active_sp_lanes << ',' << total_sp_lanes << ','
-          << sp_util_str;
-      oss << ',' << active_int_lanes << ',' << total_int_lanes << ','
-          << int_util_str;
-      oss << ',' << active_dp_lanes << ',' << total_dp_lanes << ','
-          << dp_util_str;
-      oss << ',' << active_sfu_lanes << ',' << total_sfu_lanes << ','
-          << sfu_util_str;
-      oss << ',' << active_tensor_lanes << ',' << total_tensor_lanes << ','
-          << tensor_util_str;
-    }
-    oss << '\n';
+  // One entry per mem_fetch (per emit() call) to match IMA_DEMAND
+  // per-mem_fetch counting in shader.cc:3224.
+  // Use mf->get_addr() directly; don't depend on dbg_lanes().
+  const std::vector<std::pair<unsigned, addr_t>> &lanes = mf->dbg_lanes();
+  unsigned first_lane = lanes.empty() ? 0 : lanes[0].first;
+  oss << cycle << ',' << sid << ',' << wid << ',' << first_lane << ',' << op
+      << ',' << space << ',';
+  oss << "0x" << std::hex << mf->get_addr() << std::dec << ',' << status_name
+      << ',';
+  if (has_pc) {
+    oss << "0x" << std::hex << pc << std::dec;
+  } else {
+    oss << "NA";
   }
+  // Prefetch tagging columns
+  {
+    bool is_pf = mf->is_ima_prefetch();
+    oss << ',' << (is_pf ? 1 : 0) << ',';
+    switch (mf->get_ima_kind()) {
+      case IMA_PREFETCH_INDEX: oss << "INDEX"; break;
+      case IMA_PREFETCH_DATA:  oss << "DATA";  break;
+      default:                 oss << "NONE";  break;
+    }
+  }
+  if (s_print_bw) {
+    oss << ',' << bw_str << ',' << occ_str;
+  }
+  if (s_print_compute) {
+    oss << ',' << active_alu_lanes << ',' << total_alu_lanes << ','
+        << alu_util_str;
+    oss << ',' << active_sp_lanes << ',' << total_sp_lanes << ','
+        << sp_util_str;
+    oss << ',' << active_int_lanes << ',' << total_int_lanes << ','
+        << int_util_str;
+    oss << ',' << active_dp_lanes << ',' << total_dp_lanes << ','
+        << dp_util_str;
+    oss << ',' << active_sfu_lanes << ',' << total_sfu_lanes << ','
+        << sfu_util_str;
+    oss << ',' << active_tensor_lanes << ',' << total_tensor_lanes << ','
+        << tensor_util_str;
+  }
+  oss << '\n';
 
   std::string &buffer = s_buffers[sid];
   buffer.append(oss.str());
@@ -204,8 +195,6 @@ void l1_tracer::emit_fill(unsigned sid, unsigned wid, const mem_fetch *mf,
                           unsigned long long cycle, unsigned line_sz) {
   if (!s_enabled || !mf) return;
   if (sid >= s_buffers.size()) return;
-  const std::vector<std::pair<unsigned, addr_t>> &lanes = mf->dbg_lanes();
-  if (lanes.empty()) return;
 
   const char *op = mf->dbg_is_store() ? "ST" : "LD";
   std::string space = addr_space_from_inst(mf->get_inst());
@@ -215,49 +204,40 @@ void l1_tracer::emit_fill(unsigned sid, unsigned wid, const mem_fetch *mf,
   address_type pc = mf->get_pc();
   bool has_pc = pc != static_cast<address_type>(-1);
 
-  std::unordered_set<addr_t> seen_lines;
-  seen_lines.reserve(lanes.size());
-
-  for (const auto &entry : lanes) {
-    addr_t line_addr = entry.second;
-    if (line_sz) {
-      line_addr = entry.second &
-                  ~static_cast<addr_t>(static_cast<addr_t>(line_sz) - 1);
-    }
-    if (!seen_lines.insert(line_addr).second) continue;
-
-    oss << cycle << ',' << sid << ',' << wid << ',' << entry.first << ',' << op
-        << ',' << space << ',';
-    oss << "0x" << std::hex << entry.second << std::dec << ',' << "FILL"
-        << ',';
-    if (has_pc) {
-      oss << "0x" << std::hex << pc << std::dec;
-    } else {
-      oss << "NA";
-    }
-    // Prefetch tagging columns
-    {
-      bool is_pf = mf->is_ima_prefetch();
-      oss << ',' << (is_pf ? 1 : 0) << ',';
-      switch (mf->get_ima_kind()) {
-        case IMA_PREFETCH_INDEX: oss << "INDEX"; break;
-        case IMA_PREFETCH_DATA:  oss << "DATA";  break;
-        default:                 oss << "NONE";  break;
-      }
-    }
-    if (s_print_bw) {
-      oss << ",0.000000,0.000000";
-    }
-    if (s_print_compute) {
-      oss << ",0,0,0.000000";
-      oss << ",0,0,0.000000";
-      oss << ",0,0,0.000000";
-      oss << ",0,0,0.000000";
-      oss << ",0,0,0.000000";
-      oss << ",0,0,0.000000";
-    }
-    oss << '\n';
+  // One entry per mem_fetch (matching emit() granularity)
+  const std::vector<std::pair<unsigned, addr_t>> &lanes = mf->dbg_lanes();
+  unsigned first_lane = lanes.empty() ? 0 : lanes[0].first;
+  oss << cycle << ',' << sid << ',' << wid << ',' << first_lane << ',' << op
+      << ',' << space << ',';
+  oss << "0x" << std::hex << mf->get_addr() << std::dec << ',' << "FILL"
+      << ',';
+  if (has_pc) {
+    oss << "0x" << std::hex << pc << std::dec;
+  } else {
+    oss << "NA";
   }
+  // Prefetch tagging columns
+  {
+    bool is_pf = mf->is_ima_prefetch();
+    oss << ',' << (is_pf ? 1 : 0) << ',';
+    switch (mf->get_ima_kind()) {
+      case IMA_PREFETCH_INDEX: oss << "INDEX"; break;
+      case IMA_PREFETCH_DATA:  oss << "DATA";  break;
+      default:                 oss << "NONE";  break;
+    }
+  }
+  if (s_print_bw) {
+    oss << ",0.000000,0.000000";
+  }
+  if (s_print_compute) {
+    oss << ",0,0,0.000000";
+    oss << ",0,0,0.000000";
+    oss << ",0,0,0.000000";
+    oss << ",0,0,0.000000";
+    oss << ",0,0,0.000000";
+    oss << ",0,0,0.000000";
+  }
+  oss << '\n';
 
   std::string &buffer = s_buffers[sid];
   buffer.append(oss.str());

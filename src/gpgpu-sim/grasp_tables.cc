@@ -9,8 +9,9 @@
 // Chain Table (CT)
 // ============================================================================
 
-grasp_chain_table_t::grasp_chain_table_t(unsigned num_entries)
-    : m_entries(num_entries) {}
+grasp_chain_table_t::grasp_chain_table_t(unsigned num_entries,
+                                         int64_t speculative_stride)
+    : m_entries(num_entries), m_speculative_stride(speculative_stride) {}
 
 int grasp_chain_table_t::find(new_addr_type index_pc) const {
   for (int i = 0; i < (int)m_entries.size(); ++i) {
@@ -72,6 +73,8 @@ int grasp_chain_table_t::insert(new_addr_type index_pc, new_addr_type data_pc,
   e.num_targets = 1;
   e.iter_stride = 0;
   e.stride_valid = false;
+  e.stride_speculative = false;
+  e.speculative_stride_hint = 0;
   for (unsigned i = 0; i < ct_entry_t::MAX_STRIDE_OBS; ++i)
     e.stride_obs[i] = ct_entry_t::stride_obs_t();
   e.num_stride_obs = 0;
@@ -120,6 +123,16 @@ bool grasp_chain_table_t::update_stride(int ct_idx, unsigned warp_id,
       obs->last_addr = current_addr;
       obs->last_cycle = cycle;
     }
+    // Speculative stride: use per-entry hint (from index LDG data_size) if
+    // available, otherwise fall back to global default.
+    int64_t spec = e.speculative_stride_hint ? e.speculative_stride_hint
+                                             : m_speculative_stride;
+    if (!e.stride_valid && spec != 0) {
+      e.iter_stride = spec;
+      e.stride_valid = true;
+      e.stride_speculative = true;
+      return true;  // signal convergence → prefetch pipeline starts
+    }
     return false;
   }
 
@@ -141,14 +154,20 @@ bool grasp_chain_table_t::update_stride(int ct_idx, unsigned warp_id,
     // Any warp's second observation with non-zero delta → stride valid
     e.iter_stride = delta;
     e.stride_valid = true;
+    e.stride_speculative = false;
     return true;
   }
 
-  // Already valid: check consistency
-  if (delta != e.iter_stride) {
+  if (e.stride_speculative) {
+    // Was speculative — confirm or correct with actual observed delta
     e.iter_stride = delta;
-    e.stride_valid = true;
+    e.stride_speculative = false;
+    return false;  // stride already valid, no re-signal needed
   }
+
+  // Stride already confirmed — element width is constant, no update needed.
+  // Cross-CTA warp slot reuse can produce wild deltas; freezing prevents
+  // those from corrupting the learned stride.
   return false;
 }
 

@@ -213,13 +213,71 @@ grasp_prefetcher_t::grasp_prefetcher_t(unsigned sm_id,
     : m_sm_id(sm_id),
       m_cfg(cfg),
       m_cd(cfg.cd_fifo_depth),
-      m_ct(cfg.ct_size),
+      m_ct(cfg.ct_size, cfg.speculative_stride),
       m_tt(cfg.tt_size),
       m_ist(sm_id, cfg.ist_ipt_size, cfg.ist_distance, cfg.ist_confidence),
       m_prb(cfg.prb_capacity),
-      m_demand_dedup(64) {}  // 64 warps per SM max
+      m_demand_dedup(64) {  // 64 warps per SM max
+  if (cfg.chain_csv && strlen(cfg.chain_csv) > 0) {
+    load_stride_hints(cfg.chain_csv);
+  }
+}
 
 grasp_prefetcher_t::~grasp_prefetcher_t() = default;
+
+void grasp_prefetcher_t::load_stride_hints(const char *csv_path) {
+  FILE *f = fopen(csv_path, "r");
+  if (!f) return;
+  char line[4096];
+  // Parse header
+  if (!fgets(line, sizeof(line), f)) { fclose(f); return; }
+  std::string hdr(line);
+  // Find column indices
+  int idx_pc_col = -1, stride_col = -1;
+  int col = 0;
+  size_t start = 0;
+  while (start < hdr.size()) {
+    size_t end = hdr.find(',', start);
+    if (end == std::string::npos) end = hdr.size();
+    std::string name = hdr.substr(start, end - start);
+    // trim whitespace/newline
+    while (!name.empty() && (name.back() == '\n' || name.back() == '\r' || name.back() == ' '))
+      name.pop_back();
+    if (name == "index_pc") idx_pc_col = col;
+    if (name == "stride_hint") stride_col = col;
+    start = end + 1;
+    ++col;
+  }
+  if (idx_pc_col < 0 || stride_col < 0) { fclose(f); return; }
+  // Parse rows
+  while (fgets(line, sizeof(line), f)) {
+    std::string row(line);
+    col = 0; start = 0;
+    unsigned pc = 0; int hint = 0;
+    bool got_pc = false, got_hint = false;
+    while (start < row.size()) {
+      size_t end = row.find(',', start);
+      if (end == std::string::npos) end = row.size();
+      std::string val = row.substr(start, end - start);
+      while (!val.empty() && (val.back() == '\n' || val.back() == '\r' || val.back() == ' '))
+        val.pop_back();
+      if (col == idx_pc_col) {
+        pc = (unsigned)strtoul(val.c_str(), nullptr, 16);
+        got_pc = true;
+      }
+      if (col == stride_col) {
+        hint = atoi(val.c_str());
+        got_hint = true;
+      }
+      start = end + 1;
+      ++col;
+    }
+    if (got_pc && got_hint && hint != 0 && pc != 0) {
+      m_stride_hints[pc] = static_cast<int64_t>(hint);
+    }
+  }
+  fclose(f);
+}
 
 // ---------------------------------------------------------------------------
 // Lifecycle
@@ -255,6 +313,23 @@ void grasp_prefetcher_t::on_warp_exit(unsigned warp_id) {
   // CD handles freeze internally — no warp succession.
   // Tracked warp exit → training frozen permanently for this kernel.
   m_cd.on_warp_exit(warp_id);
+
+  // Clear per-warp stride observations in CT to prevent stale addresses
+  // from polluting delta computation when the warp slot is reused by a
+  // new CTA.  (Stride itself is frozen after convergence, but keeping
+  // obs clean avoids wasted slots and misleading trace output.)
+  for (unsigned i = 0; i < m_ct.capacity(); ++i) {
+    ct_entry_t &e = m_ct.entry(i);
+    if (!e.valid) continue;
+    for (unsigned j = 0; j < e.num_stride_obs; ++j) {
+      if (e.stride_obs[j].warp_id == warp_id) {
+        e.stride_obs[j] = e.stride_obs[e.num_stride_obs - 1];
+        e.stride_obs[e.num_stride_obs - 1] = ct_entry_t::stride_obs_t();
+        --e.num_stride_obs;
+        break;  // at most one obs per warp per CT entry
+      }
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -293,6 +368,7 @@ void grasp_prefetcher_t::on_instruction_issue(unsigned warp_id,
                                              sass_opcode, dst_reg, src_regs,
                                              num_src, cycle,
                                              first_lane_addr, first_lane_id,
+                                             inst.data_size,
                                              &chain);
 
   if (detected) {
@@ -324,6 +400,16 @@ void grasp_prefetcher_t::on_instruction_issue(unsigned warp_id,
       ct_idx = m_ct.insert(chain.index_pc, chain.data_pc, 0 /*imad_pc*/,
                            (unsigned)tt_idx);
       m_ct.entry(ct_idx).last_access_time = cycle;
+      // Per-entry speculative stride: CSV stride_hint > data_size > global default
+      {
+        auto it = m_stride_hints.find(chain.index_pc);
+        if (it != m_stride_hints.end()) {
+          m_ct.entry(ct_idx).speculative_stride_hint = it->second;
+        } else if (chain.index_data_size > 0) {
+          m_ct.entry(ct_idx).speculative_stride_hint =
+              static_cast<int64_t>(chain.index_data_size);
+        }
+      }
 
       // Seed first stride observation: record the index load address from the
       // iteration that triggered CD.  This allows stride to converge one
@@ -664,6 +750,20 @@ grasp_prefetcher_t::prefetch_result_t grasp_prefetcher_t::inject_prefetch(
       ++m_stats.pair_table_lookup_hit;
     } else {
       ++m_stats.pair_table_lookup_miss;
+      if (m_cfg.debug) {
+        printf("GRASP_PT_MISS: sm=%u warp=%u sector=0x%llx lane_addrs=[",
+               m_sm_id, req.warp_id, (unsigned long long)paddr);
+        for (size_t i = 0; i < req.lane_addrs.size(); ++i) {
+          if (i > 0) printf(",");
+          printf("0x%llx", (unsigned long long)req.lane_addrs[i]);
+        }
+        printf("] chains=[");
+        for (size_t i = 0; i < req.seed_chain_ids.size(); ++i) {
+          if (i > 0) printf(",");
+          printf("%u", req.seed_chain_ids[i]);
+        }
+        printf("]\n");
+      }
     }
     if (m_cfg.debug) {
       printf(
@@ -811,15 +911,17 @@ void grasp_prefetcher_t::print_config(FILE *fp) const {
   fprintf(fp,
           "GRASP_CONFIG: cd_fifo=%u ct_size=%u tt_size=%u "
           "ist_ipt=%u ist_dist=%u ist_conf=%u "
-          "prb_cap=%u tc_mshr_thr=%u\n",
+          "prb_cap=%u tc_mshr_thr=%u pt_scope=%u spec_stride=%lld\n",
           m_cfg.cd_fifo_depth, m_cfg.ct_size, m_cfg.tt_size,
           m_cfg.ist_ipt_size, m_cfg.ist_distance, m_cfg.ist_confidence,
-          m_cfg.prb_capacity, m_cfg.tc_mshr_threshold);
+          m_cfg.prb_capacity, m_cfg.tc_mshr_threshold,
+          m_cfg.pair_table_scope, (long long)m_cfg.speculative_stride);
 }
 
 void grasp_prefetcher_t::print_stats(FILE *fp, unsigned long long pf_useful,
                                      unsigned long long pf_useless,
-                                     unsigned long long pf_late) const {
+                                     unsigned long long pf_late,
+                                     const ima_demand_breakdown_t *ima) const {
   fprintf(fp, "GRASP_SM%u: ", m_sm_id);
   fprintf(fp, "kernels=%llu warp_exits=%llu ", m_stats.kernel_launches,
           m_stats.warp_exits);
@@ -878,16 +980,55 @@ void grasp_prefetcher_t::print_stats(FILE *fp, unsigned long long pf_useful,
           m_sm_id, prb_s.peak_occupancy, prb_s.total_allocations,
           prb_s.full_stall_cycles);
 
+  // Storage utilization summary (peak occupancy vs configured capacity)
+  {
+    double prb_util = m_cfg.prb_capacity > 0
+                          ? 100.0 * prb_s.peak_occupancy / m_cfg.prb_capacity
+                          : 0.0;
+    double ct_util = m_cfg.ct_size > 0
+                         ? 100.0 * ct_s.peak_occupancy / m_cfg.ct_size
+                         : 0.0;
+    double cd_util = m_cfg.cd_fifo_depth > 0
+                         ? 100.0 * cd_s.fifo_peak_occupancy / m_cfg.cd_fifo_depth
+                         : 0.0;
+    fprintf(fp,
+            "GRASP_STORAGE SM%u: prb=%llu/%u(%.1f%%) ct=%llu/%u(%.1f%%) "
+            "cd_fifo=%llu/%u(%.1f%%) pf_queue_peak=%llu\n",
+            m_sm_id, prb_s.peak_occupancy, m_cfg.prb_capacity, prb_util,
+            ct_s.peak_occupancy, m_cfg.ct_size, ct_util,
+            cd_s.fifo_peak_occupancy, m_cfg.cd_fifo_depth, cd_util,
+            m_stats.queue_peak_depth);
+  }
+
   // Demand load stats (tracked in grasp_stats_t)
   fprintf(fp,
           "GRASP_DEMAND SM%u: global_reads=%llu global_misses=%llu "
-          "ima_reads=%llu ima_misses=%llu throttle_suppressed=%llu\n",
+          "throttle_suppressed=%llu\n",
           m_sm_id, m_stats.total_demand_global_reads,
           m_stats.total_demand_global_misses,
-          m_stats.ima_demand_reads, m_stats.ima_demand_misses,
           m_stats.throttle_suppressed);
 
-  // Prefetch effectiveness metrics (IMA loads only)
+  // IMA demand breakdown per SM (from ldst_unit, chain CSV-based PC filter)
+  if (ima) {
+    fprintf(fp,
+            "GRASP_IMA_DEMAND SM%u:"
+            " idx(reads=%llu hits=%llu hit_res=%llu misses=%llu)"
+            " data(reads=%llu hits=%llu hit_res=%llu misses=%llu)\n",
+            m_sm_id,
+            ima->idx_reads, ima->idx_hits, ima->idx_hit_reserved, ima->idx_misses,
+            ima->data_reads, ima->data_hits, ima->data_hit_reserved, ima->data_misses);
+    // Timeliness = hits / (hits + hit_reserved)
+    unsigned long long idx_a = ima->idx_hits + ima->idx_hit_reserved;
+    unsigned long long data_a = ima->data_hits + ima->data_hit_reserved;
+    fprintf(fp, "GRASP_TIMELINESS SM%u:", m_sm_id);
+    if (idx_a > 0)
+      fprintf(fp, " index=%.2f%%", 100.0 * ima->idx_hits / idx_a);
+    if (data_a > 0)
+      fprintf(fp, " data=%.2f%%", 100.0 * ima->data_hits / data_a);
+    fprintf(fp, "\n");
+  }
+
+  // Legacy prefetch effectiveness metrics (kept for backward compat / debug)
   fprintf(fp,
           "GRASP_EFFECT SM%u: pf_useful=%llu pf_useless=%llu pf_late=%llu",
           m_sm_id, pf_useful, pf_useless, pf_late);
@@ -895,15 +1036,61 @@ void grasp_prefetcher_t::print_stats(FILE *fp, unsigned long long pf_useful,
   if (total_classified > 0) {
     fprintf(fp, " accuracy=%.2f%%", 100.0 * pf_useful / total_classified);
   }
-  if (m_stats.ima_demand_misses > 0) {
-    fprintf(fp, " coverage=%.2f%%",
-            100.0 * pf_useful / m_stats.ima_demand_misses);
-  }
-  if (pf_useful > 0) {
-    fprintf(fp, " timeliness=%.2f%%",
-            100.0 * (pf_useful - pf_late) / pf_useful);
-  }
   fprintf(fp, "\n");
+
+  // Reservation failure breakdown: merge index+data, report per-reason %
+  {
+    unsigned long long rfail_combined[NUM_CACHE_RESERVATION_FAIL_STATUS];
+    unsigned long long rfail_total = 0;
+    for (int r = 0; r < NUM_CACHE_RESERVATION_FAIL_STATUS; ++r) {
+      rfail_combined[r] =
+          m_stats.index_pf_rfail[r] + m_stats.data_pf_rfail[r];
+      rfail_total += rfail_combined[r];
+    }
+    fprintf(fp, "GRASP_RFAIL SM%u: total=%llu", m_sm_id, rfail_total);
+    if (rfail_total > 0) {
+      fprintf(fp,
+              " line_alloc=%.1f%% missq=%.1f%% mshr_entry=%.1f%%"
+              " mshr_merge=%.1f%% rw_pending=%.1f%%",
+              100.0 * rfail_combined[LINE_ALLOC_FAIL] / rfail_total,
+              100.0 * rfail_combined[MISS_QUEUE_FULL] / rfail_total,
+              100.0 * rfail_combined[MSHR_ENRTY_FAIL] / rfail_total,
+              100.0 * rfail_combined[MSHR_MERGE_ENRTY_FAIL] / rfail_total,
+              100.0 * rfail_combined[MSHR_RW_PENDING] / rfail_total);
+    }
+    fprintf(fp, "\n");
+  }
+
+  // Prefetch pipeline funnel: index → data conversion tracking
+  {
+    auto idx_attempted = m_stats.index_pf_issued + m_stats.index_pf_hit +
+                         m_stats.index_pf_mshr_merge +
+                         m_stats.index_pf_reservation_fail;
+    auto idx_rfail = m_stats.index_pf_reservation_fail;
+    auto idx_got_data = idx_attempted - idx_rfail;
+    auto data_enqueued = m_stats.data_pf_enqueued;
+    auto data_throttled = m_stats.throttle_suppressed;
+    auto data_attempted = m_stats.data_pf_issued + m_stats.data_pf_hit +
+                          m_stats.data_pf_mshr_merge +
+                          m_stats.data_pf_reservation_fail;
+    auto data_rfail = m_stats.data_pf_reservation_fail;
+    auto data_got_data = data_attempted - data_rfail;
+    fprintf(fp,
+            "GRASP_FUNNEL SM%u: idx_attempted=%llu idx_rfail=%llu",
+            m_sm_id, idx_attempted, idx_rfail);
+    if (idx_attempted > 0) {
+      fprintf(fp, "(%.1f%%)", 100.0 * idx_rfail / idx_attempted);
+    }
+    fprintf(fp, " idx_got_data=%llu", idx_got_data);
+    fprintf(fp,
+            " | data_enqueued=%llu data_throttled=%llu data_attempted=%llu"
+            " data_rfail=%llu",
+            data_enqueued, data_throttled, data_attempted, data_rfail);
+    if (data_attempted > 0) {
+      fprintf(fp, "(%.1f%%)", 100.0 * data_rfail / data_attempted);
+    }
+    fprintf(fp, " data_got_data=%llu\n", data_got_data);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -997,6 +1184,7 @@ void grasp_prefetcher_t::release_prb_sector_targets(
       }
       queue_prefetch(data_sector, entry.warp_id, cand.successor_chain_ids,
                      ready_cycle);
+      ++m_stats.data_pf_enqueued;
       if (grasp_tracer::enabled()) {
         char det2[128];
         snprintf(det2, sizeof(det2), "chain_id=%u;prb_id=%u;succ=%zu",

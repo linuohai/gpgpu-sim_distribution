@@ -36,6 +36,7 @@ class grasp_chain_detector_t {
     // Index load address (first active lane) — used to seed stride observation
     new_addr_type index_addr;
     unsigned index_lane_id;
+    unsigned index_data_size;  // index LDG memory width (bytes), for speculative stride
   };
 
   // Called on each instruction issue (tracked warp only).
@@ -46,6 +47,7 @@ class grasp_chain_detector_t {
                             unsigned num_src_regs, unsigned long long cycle,
                             new_addr_type first_lane_addr,
                             unsigned first_lane_id,
+                            unsigned data_size,  // memory access width (bytes)
                             detected_chain_t *out_chain);
 
   // Warp exit: clear FIFO
@@ -97,6 +99,7 @@ class grasp_chain_detector_t {
     // Memory address (first active lane) — for LOAD_RESULT
     new_addr_type addr = 0;
     unsigned lane_id = 0;
+    unsigned data_size = 0;  // memory access width in bytes
     // Only for IMA_ADDR_COMPUTE type
     new_addr_type index_pc = 0;
     new_addr_type index_addr = 0;

@@ -3205,18 +3205,42 @@ void ldst_unit::L1_latency_queue_cycle() {
         unsigned long long cycle = m_core->get_gpu()->gpu_sim_cycle +
                                    m_core->get_gpu()->gpu_tot_sim_cycle;
         shd_warp_t *warp = m_core->get_warp_ptr(mf_next->get_wid());
-        // Metrics: global demand load counting (before GRASP processes it)
-        if (m_grasp && m_grasp->enabled()) {
+        // Use probe_status (from tag_array::probe) for miss determination.
+        // l1_cache::access() returns MISS for HIT_RESERVED probes (core
+        // perspective), but probe_status correctly distinguishes them.
+        enum cache_request_status probe =
+            m_L1D->last_probe_status();
+        // Metrics: global demand load counting (skip RESERVATION_FAIL retries)
+        if (status != RESERVATION_FAIL && m_grasp && m_grasp->enabled()) {
           ++m_grasp->stats_mut().total_demand_global_reads;
-          if (status == MISS || status == SECTOR_MISS) {
+          if (probe == MISS || probe == SECTOR_MISS) {
             ++m_grasp->stats_mut().total_demand_global_misses;
+          }
+        }
+        // IMA demand load tracking (works in both baseline and GRASP mode)
+        // Uses chain CSV-based PC identification, independent of GRASP CT
+        // Tracks HIT/HIT_RESERVED/MISS per index/data for timeliness & coverage
+        // Skip RESERVATION_FAIL (retries — will be counted on final resolution)
+        if (status != RESERVATION_FAIL && warp != NULL) {
+          address_type pc = static_cast<address_type>(mf_next->get_pc());
+          if (warp->is_ima_index_pc(pc)) {
+            ++m_ima_index_reads;
+            if (probe == HIT) ++m_ima_index_hits;
+            else if (probe == HIT_RESERVED) ++m_ima_index_hit_reserved;
+            else ++m_ima_index_misses;  // MISS or SECTOR_MISS
+          } else if (warp->is_ima_data_pc(pc)) {
+            ++m_ima_data_reads;
+            if (probe == HIT) ++m_ima_data_hits;
+            else if (probe == HIT_RESERVED) ++m_ima_data_hit_reserved;
+            else ++m_ima_data_misses;  // MISS or SECTOR_MISS
           }
         }
         if (m_grasp) {
           // GRASP mode: delegate to grasp_prefetcher_t
+          // Pass probe_status so on_demand_load sees correct miss/hit
           m_grasp->on_demand_load(mf_next->get_wid(), mf_next->get_pc(),
                                   mf_next->get_addr(), cycle, warp,
-                                  mf_next, status);
+                                  mf_next, static_cast<int>(probe));
         } else if (m_config->gpgpu_ima_prefetch_enable) {
           // Legacy IMA mode
           std::vector<unsigned> seed_chain_ids;
@@ -3816,6 +3840,8 @@ ldst_unit::ldst_unit(mem_fetch_interface *icnt,
     gcfg.prb_capacity = m_config->grasp_prb_capacity;
     gcfg.chain_csv = m_config->gpgpu_ima_prefetch_chain_csv;
     gcfg.tc_mshr_threshold = m_config->grasp_tc_mshr_threshold;
+    gcfg.pair_table_scope = m_config->grasp_pair_table_scope;
+    gcfg.speculative_stride = m_config->grasp_speculative_stride;
     m_grasp = new grasp_prefetcher_t(m_sid, gcfg);
     m_grasp->set_l1d(m_L1D);
   } else if (m_config->gpgpu_ima_prefetch_enable && m_L1D != nullptr) {
@@ -3852,6 +3878,8 @@ ldst_unit::ldst_unit(mem_fetch_interface *icnt,
     gcfg.prb_capacity = m_config->grasp_prb_capacity;
     gcfg.chain_csv = m_config->gpgpu_ima_prefetch_chain_csv;
     gcfg.tc_mshr_threshold = m_config->grasp_tc_mshr_threshold;
+    gcfg.pair_table_scope = m_config->grasp_pair_table_scope;
+    gcfg.speculative_stride = m_config->grasp_speculative_stride;
     m_grasp = new grasp_prefetcher_t(m_sid, gcfg);
     m_grasp->set_l1d(m_L1D);
   } else if (m_config->gpgpu_ima_prefetch_enable && m_L1D != nullptr) {
@@ -5642,7 +5670,16 @@ void shader_core_ctx::print_grasp_stats(FILE *fp) const {
   if (m_ldst_unit->grasp_enabled()) {
     unsigned long long pf_useful, pf_useless, pf_late;
     m_ldst_unit->get_pf_metrics(pf_useful, pf_useless, pf_late);
-    m_ldst_unit->grasp()->print_stats(fp, pf_useful, pf_useless, pf_late);
+    grasp_prefetcher_t::ima_demand_breakdown_t ima;
+    ima.idx_reads = m_ldst_unit->get_ima_index_reads();
+    ima.idx_hits = m_ldst_unit->get_ima_index_hits();
+    ima.idx_hit_reserved = m_ldst_unit->get_ima_index_hit_reserved();
+    ima.idx_misses = m_ldst_unit->get_ima_index_misses();
+    ima.data_reads = m_ldst_unit->get_ima_data_reads();
+    ima.data_hits = m_ldst_unit->get_ima_data_hits();
+    ima.data_hit_reserved = m_ldst_unit->get_ima_data_hit_reserved();
+    ima.data_misses = m_ldst_unit->get_ima_data_misses();
+    m_ldst_unit->grasp()->print_stats(fp, pf_useful, pf_useless, pf_late, &ima);
   }
 }
 
@@ -5650,6 +5687,27 @@ void shader_core_ctx::print_grasp_config(FILE *fp) const {
   if (m_ldst_unit->grasp_enabled()) {
     m_ldst_unit->grasp()->print_config(fp);
   }
+}
+
+void shader_core_ctx::get_ima_demand_stats(unsigned long long &reads,
+                                           unsigned long long &misses) const {
+  reads = m_ldst_unit->get_ima_demand_reads();
+  misses = m_ldst_unit->get_ima_demand_misses();
+}
+
+void shader_core_ctx::get_ima_demand_stats_detail(
+    unsigned long long &idx_reads, unsigned long long &idx_hits,
+    unsigned long long &idx_hit_reserved, unsigned long long &idx_misses,
+    unsigned long long &data_reads, unsigned long long &data_hits,
+    unsigned long long &data_hit_reserved, unsigned long long &data_misses) const {
+  idx_reads = m_ldst_unit->get_ima_index_reads();
+  idx_hits = m_ldst_unit->get_ima_index_hits();
+  idx_hit_reserved = m_ldst_unit->get_ima_index_hit_reserved();
+  idx_misses = m_ldst_unit->get_ima_index_misses();
+  data_reads = m_ldst_unit->get_ima_data_reads();
+  data_hits = m_ldst_unit->get_ima_data_hits();
+  data_hit_reserved = m_ldst_unit->get_ima_data_hit_reserved();
+  data_misses = m_ldst_unit->get_ima_data_misses();
 }
 
 void shader_core_ctx::get_cache_stats(cache_stats &cs) {
@@ -6455,6 +6513,32 @@ void simt_core_cluster::print_grasp_config(FILE *fp) const {
   // Print config once from the first core in this cluster
   if (m_config->n_simt_cores_per_cluster > 0) {
     m_core[0]->print_grasp_config(fp);
+  }
+}
+
+void simt_core_cluster::get_ima_demand_stats(unsigned long long &reads,
+                                             unsigned long long &misses) const {
+  reads = misses = 0;
+  for (unsigned i = 0; i < m_config->n_simt_cores_per_cluster; ++i) {
+    unsigned long long r, m;
+    m_core[i]->get_ima_demand_stats(r, m);
+    reads += r;
+    misses += m;
+  }
+}
+
+void simt_core_cluster::get_ima_demand_stats_detail(
+    unsigned long long &idx_reads, unsigned long long &idx_hits,
+    unsigned long long &idx_hit_reserved, unsigned long long &idx_misses,
+    unsigned long long &data_reads, unsigned long long &data_hits,
+    unsigned long long &data_hit_reserved, unsigned long long &data_misses) const {
+  idx_reads = idx_hits = idx_hit_reserved = idx_misses = 0;
+  data_reads = data_hits = data_hit_reserved = data_misses = 0;
+  for (unsigned i = 0; i < m_config->n_simt_cores_per_cluster; ++i) {
+    unsigned long long ir, ih, ihr, im, dr, dh, dhr, dm;
+    m_core[i]->get_ima_demand_stats_detail(ir, ih, ihr, im, dr, dh, dhr, dm);
+    idx_reads += ir; idx_hits += ih; idx_hit_reserved += ihr; idx_misses += im;
+    data_reads += dr; data_hits += dh; data_hit_reserved += dhr; data_misses += dm;
   }
 }
 

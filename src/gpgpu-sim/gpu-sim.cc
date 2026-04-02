@@ -467,6 +467,20 @@ void shader_core_config::reg_options(class OptionParser *opp) {
                          "GRASP throttle: MSHR occupancy %% above which data "
                          "PF is suppressed",
                          "80");
+  option_parser_register(opp, "-grasp_pair_table_scope", OPT_UINT32,
+                         &grasp_pair_table_scope,
+                         "IMA pair table scope: 0=per-warp, 1=per-CTA, "
+                         "2=per-kernel",
+                         "0");
+  option_parser_register(opp, "-grasp_speculative_stride", OPT_INT32,
+                         &grasp_speculative_stride,
+                         "Speculative stride for first iteration "
+                         "(0=disabled). Use with stride_hint column in chain CSV.",
+                         "0");
+  option_parser_register(opp, "-grasp_pair_table_dump_path", OPT_CSTR,
+                         &grasp_pair_table_dump_path,
+                         "dump pair table addr_map to CSV (empty=disabled)",
+                         "");
   option_parser_register(
       opp, "-n_regfile_gating_group", OPT_UINT32, &n_regfile_gating_group,
       "group of lanes that should be read/written together)", "4");
@@ -1889,6 +1903,38 @@ void gpgpu_sim::gpu_print_stat(unsigned long long streamID) {
       m_cluster[i]->print_grasp_stats(stdout);
     }
     printf("==========================================\n");
+  }
+
+  // IMA demand load stats (works in both baseline and GRASP mode)
+  // Breakdown: reads = hits (HIT) + hit_reserved (HIT_RESERVED) + misses (MISS|SECTOR_MISS)
+  {
+    unsigned long long ir = 0, ih_i = 0, ihr_i = 0, im = 0;
+    unsigned long long dr = 0, ih_d = 0, ihr_d = 0, dm = 0;
+    for (unsigned i = 0; i < m_config.num_cluster(); i++) {
+      unsigned long long cir, cih, cihr, cim, cdr, cdh, cdhr, cdm;
+      m_cluster[i]->get_ima_demand_stats_detail(cir, cih, cihr, cim,
+                                                 cdr, cdh, cdhr, cdm);
+      ir += cir; ih_i += cih; ihr_i += cihr; im += cim;
+      dr += cdr; ih_d += cdh; ihr_d += cdhr; dm += cdm;
+    }
+    unsigned long long tr = ir + dr, tm = im + dm;
+    if (tr > 0) {
+      printf("IMA_DEMAND: total_reads=%llu total_misses=%llu "
+             "index_reads=%llu index_hits=%llu index_hit_reserved=%llu index_misses=%llu "
+             "data_reads=%llu data_hits=%llu data_hit_reserved=%llu data_misses=%llu\n",
+             tr, tm, ir, ih_i, ihr_i, im, dr, ih_d, ihr_d, dm);
+      // Timeliness: fraction of hits that were direct (data ready) vs hit_reserved
+      unsigned long long idx_a = ih_i + ihr_i, data_a = ih_d + ihr_d;
+      if (idx_a > 0)
+        printf("IMA_TIMELINESS: index=%.2f%%", 100.0 * ih_i / idx_a);
+      if (data_a > 0)
+        printf(" data=%.2f%%", 100.0 * ih_d / data_a);
+      if (idx_a > 0 || data_a > 0)
+        printf("\n");
+      // Sanity check: reads == hits + hit_reserved + misses
+      assert(ir == ih_i + ihr_i + im);
+      assert(dr == ih_d + ihr_d + dm);
+    }
   }
 
   m_shader_stats->print(stdout);

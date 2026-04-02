@@ -20,6 +20,7 @@
 #include <deque>
 #include <functional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "../abstract_hardware_model.h"
@@ -65,6 +66,12 @@ struct grasp_config_t {
 
   // Throttle Control
   unsigned tc_mshr_threshold = 80;  // MSHR occupancy %, suppress data PF above
+
+  // Pair Table scope (trace-driven)
+  unsigned pair_table_scope = 0;  // 0=per-warp, 1=per-CTA, 2=per-kernel
+
+  // Speculative stride: assumed stride on first observation (0=disabled)
+  int speculative_stride = 0;
 };
 
 // ============================================================================
@@ -210,6 +217,7 @@ struct grasp_stats_t {
   unsigned long long data_pf_mshr_merge = 0;
   unsigned long long data_pf_reservation_fail = 0;  // total (sum of per-reason)
   unsigned long long data_pf_rfail[NUM_CACHE_RESERVATION_FAIL_STATUS] = {};
+  unsigned long long data_pf_enqueued = 0;  // data PF candidates queued after index fill
 
   // Pair Table
   unsigned long long pair_table_lookup_hit = 0;
@@ -299,9 +307,14 @@ class grasp_prefetcher_t {
 
   // === Stats ===
   void print_config(FILE *fp) const;
+  struct ima_demand_breakdown_t {
+    unsigned long long idx_reads = 0, idx_hits = 0, idx_hit_reserved = 0, idx_misses = 0;
+    unsigned long long data_reads = 0, data_hits = 0, data_hit_reserved = 0, data_misses = 0;
+  };
   void print_stats(FILE *fp, unsigned long long pf_useful = 0,
                    unsigned long long pf_useless = 0,
-                   unsigned long long pf_late = 0) const;
+                   unsigned long long pf_late = 0,
+                   const ima_demand_breakdown_t *ima = nullptr) const;
 
   // Accessors
   bool enabled() const { return m_cfg.enable; }
@@ -332,6 +345,10 @@ class grasp_prefetcher_t {
     unsigned long long inst_uid = 0;
   };
   std::vector<warp_dedup_t> m_demand_dedup;  // indexed by warp_id
+
+  // Per-index-PC speculative stride hints (from chain CSV stride_hint column)
+  std::unordered_map<new_addr_type, int64_t> m_stride_hints;
+  void load_stride_hints(const char *csv_path);
 
   // L1D cache pointer (set via set_l1d)
   l1_cache *m_l1d = nullptr;
