@@ -1503,6 +1503,13 @@ class ldst_unit : public pipelined_simd_unit {
     }
   }
 
+  void print_miss_queue_peak(FILE *fp, unsigned sid) const {
+    if (m_L1D)
+      fprintf(fp, "GRASP_L1MQ SM%u: miss_queue_peak=%u/%u mshr_peak=%u/%u\n",
+              sid, m_L1D->miss_queue_peak(), m_L1D->miss_queue_capacity(),
+              m_L1D->mshr_peak(), m_L1D->mshr_capacity());
+  }
+
   // IMA demand load tracking (works in both baseline and GRASP mode)
   // Per-type: reads = hits + hit_reserved + misses
   unsigned long long m_ima_index_reads = 0, m_ima_index_misses = 0;
@@ -1798,7 +1805,14 @@ class shader_core_config : public core_config {
   unsigned grasp_ist_distance;
   unsigned grasp_ist_confidence;
   unsigned grasp_prb_capacity;
+  unsigned grasp_tc_mode;
   unsigned grasp_tc_mshr_threshold;
+  unsigned grasp_tc_mshr_lo;
+  unsigned grasp_tc_mshr_hi;
+  unsigned grasp_tc_queue_cap;
+  unsigned grasp_tc_cooldown_cycles;
+  unsigned grasp_tc_acc_lo;
+  unsigned grasp_tc_acc_hi;
   unsigned grasp_pair_table_scope;  // 0=per-warp, 1=per-CTA, 2=per-kernel
   char *grasp_pair_table_dump_path;  // CSV dump of pair table addr_map (empty=disabled)
   int grasp_speculative_stride;  // speculative stride on first obs (0=disabled)

@@ -1101,6 +1101,8 @@ class mshr_table {
   // GRASP throttle: MSHR occupancy query
   unsigned occupancy() const { return m_data.size(); }
   unsigned capacity() const { return m_num_entries; }
+  unsigned peak_occupancy() const { return m_peak_occupancy; }
+  void update_peak() { if (m_data.size() > m_peak_occupancy) m_peak_occupancy = m_data.size(); }
 
   // Check if the MSHR entry for block_addr was initiated by a prefetch
   bool is_prefetch_initiated(new_addr_type block_addr) const {
@@ -1131,6 +1133,7 @@ class mshr_table {
   typedef tr1_hash_map<new_addr_type, mshr_entry> line_table;
   table m_data;
   line_table pending_lines;
+  unsigned m_peak_occupancy = 0;
 
   // it may take several cycles to process the merged requests
   bool m_current_response_ready;
@@ -1456,6 +1459,11 @@ class baseline_cache : public cache_t {
     m_tag_array->fill(addr, time, mask, byte_mask, true);
   }
 
+  unsigned miss_queue_peak() const { return m_miss_queue_peak; }
+  unsigned miss_queue_capacity() const { return m_config.m_miss_queue_size; }
+  unsigned mshr_peak() const { return m_mshrs.peak_occupancy(); }
+  unsigned mshr_capacity() const { return m_config.m_mshr_entries; }
+
  protected:
   // Constructor that can be used by derived classes with custom tag arrays
   baseline_cache(const char *name, cache_config &config, int core_id,
@@ -1475,6 +1483,7 @@ class baseline_cache : public cache_t {
   tag_array *m_tag_array;
   mshr_table m_mshrs;
   std::list<mem_fetch *> m_miss_queue;
+  unsigned m_miss_queue_peak = 0;
   enum mem_fetch_status m_miss_queue_status;
   mem_fetch_interface *m_memport;
   cache_gpu_level m_level;

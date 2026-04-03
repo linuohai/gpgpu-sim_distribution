@@ -3838,7 +3838,14 @@ ldst_unit::ldst_unit(mem_fetch_interface *icnt,
     gcfg.ist_confidence = m_config->grasp_ist_confidence;
     gcfg.prb_capacity = m_config->grasp_prb_capacity;
     gcfg.chain_csv = m_config->gpgpu_ima_prefetch_chain_csv;
+    gcfg.tc_mode = m_config->grasp_tc_mode;
     gcfg.tc_mshr_threshold = m_config->grasp_tc_mshr_threshold;
+    gcfg.tc_mshr_lo = m_config->grasp_tc_mshr_lo;
+    gcfg.tc_mshr_hi = m_config->grasp_tc_mshr_hi;
+    gcfg.tc_queue_cap = m_config->grasp_tc_queue_cap;
+    gcfg.tc_cooldown_cycles = m_config->grasp_tc_cooldown_cycles;
+    gcfg.tc_acc_lo = m_config->grasp_tc_acc_lo;
+    gcfg.tc_acc_hi = m_config->grasp_tc_acc_hi;
     gcfg.pair_table_scope = m_config->grasp_pair_table_scope;
     gcfg.speculative_stride = m_config->grasp_speculative_stride;
     m_grasp = new grasp_prefetcher_t(m_sid, gcfg);
@@ -3876,7 +3883,14 @@ ldst_unit::ldst_unit(mem_fetch_interface *icnt,
     gcfg.ist_confidence = m_config->grasp_ist_confidence;
     gcfg.prb_capacity = m_config->grasp_prb_capacity;
     gcfg.chain_csv = m_config->gpgpu_ima_prefetch_chain_csv;
+    gcfg.tc_mode = m_config->grasp_tc_mode;
     gcfg.tc_mshr_threshold = m_config->grasp_tc_mshr_threshold;
+    gcfg.tc_mshr_lo = m_config->grasp_tc_mshr_lo;
+    gcfg.tc_mshr_hi = m_config->grasp_tc_mshr_hi;
+    gcfg.tc_queue_cap = m_config->grasp_tc_queue_cap;
+    gcfg.tc_cooldown_cycles = m_config->grasp_tc_cooldown_cycles;
+    gcfg.tc_acc_lo = m_config->grasp_tc_acc_lo;
+    gcfg.tc_acc_hi = m_config->grasp_tc_acc_hi;
     gcfg.pair_table_scope = m_config->grasp_pair_table_scope;
     gcfg.speculative_stride = m_config->grasp_speculative_stride;
     m_grasp = new grasp_prefetcher_t(m_sid, gcfg);
@@ -5679,6 +5693,7 @@ void shader_core_ctx::print_grasp_stats(FILE *fp) const {
     ima.data_hit_reserved = m_ldst_unit->get_ima_data_hit_reserved();
     ima.data_misses = m_ldst_unit->get_ima_data_misses();
     m_ldst_unit->grasp()->print_stats(fp, pf_useful, pf_useless, pf_late, &ima);
+    m_ldst_unit->print_miss_queue_peak(fp, m_sid);
   }
 }
 

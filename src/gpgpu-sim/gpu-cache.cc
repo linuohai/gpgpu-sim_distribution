@@ -572,6 +572,7 @@ bool mshr_table::full(new_addr_type block_addr) const {
 /// Add or merge this access
 void mshr_table::add(new_addr_type block_addr, mem_fetch *mf) {
   m_data[block_addr].m_list.push_back(mf);
+  update_peak();
   assert(m_data.size() <= m_num_entries);
   assert(m_data[block_addr].m_list.size() <= m_max_merged);
   // indicate that this MSHR entry contains an atomic operation
@@ -1413,6 +1414,8 @@ void baseline_cache::send_read_request(new_addr_type addr,
     mf->set_data_size(m_config.get_atom_sz());
     mf->set_addr(mshr_addr);
     m_miss_queue.push_back(mf);
+    if (m_miss_queue.size() > m_miss_queue_peak)
+      m_miss_queue_peak = m_miss_queue.size();
     mf->set_status(m_miss_queue_status, time);
     if (!wa) events.push_back(cache_event(READ_REQUEST_SENT));
 
@@ -1435,6 +1438,8 @@ void data_cache::send_write_request(mem_fetch *mf, cache_event request,
                                     std::list<cache_event> &events) {
   events.push_back(request);
   m_miss_queue.push_back(mf);
+  if (m_miss_queue.size() > m_miss_queue_peak)
+    m_miss_queue_peak = m_miss_queue.size();
   mf->set_status(m_miss_queue_status, time);
 }
 

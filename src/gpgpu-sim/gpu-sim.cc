@@ -462,11 +462,40 @@ void shader_core_config::reg_options(class OptionParser *opp) {
   option_parser_register(opp, "-grasp_prb_capacity", OPT_UINT32,
                          &grasp_prb_capacity,
                          "GRASP Prefetch Request Buffer capacity", "1024");
+  option_parser_register(opp, "-grasp_tc_mode", OPT_UINT32,
+                         &grasp_tc_mode,
+                         "GRASP throttle mode: 0=legacy, 1=dual-thr, "
+                         "2=queue-cap, 3=acc-gate, 4=cooldown",
+                         "0");
   option_parser_register(opp, "-grasp_tc_mshr_threshold", OPT_UINT32,
                          &grasp_tc_mshr_threshold,
                          "GRASP throttle: MSHR occupancy %% above which data "
                          "PF is suppressed",
                          "80");
+  option_parser_register(opp, "-grasp_tc_mshr_lo", OPT_UINT32,
+                         &grasp_tc_mshr_lo,
+                         "GRASP throttle: lower MSHR threshold %% (S1/S3)",
+                         "50");
+  option_parser_register(opp, "-grasp_tc_mshr_hi", OPT_UINT32,
+                         &grasp_tc_mshr_hi,
+                         "GRASP throttle: upper MSHR threshold %% (S1/S3)",
+                         "90");
+  option_parser_register(opp, "-grasp_tc_queue_cap", OPT_UINT32,
+                         &grasp_tc_queue_cap,
+                         "GRASP throttle: max data PFs in queue, 0=off (S2)",
+                         "0");
+  option_parser_register(opp, "-grasp_tc_cooldown", OPT_UINT32,
+                         &grasp_tc_cooldown_cycles,
+                         "GRASP throttle: cooldown cycles after trigger (S4)",
+                         "0");
+  option_parser_register(opp, "-grasp_tc_acc_lo", OPT_UINT32,
+                         &grasp_tc_acc_lo,
+                         "GRASP throttle: accuracy %% for tight throttle (S3)",
+                         "30");
+  option_parser_register(opp, "-grasp_tc_acc_hi", OPT_UINT32,
+                         &grasp_tc_acc_hi,
+                         "GRASP throttle: accuracy %% for loose throttle (S3)",
+                         "60");
   option_parser_register(opp, "-grasp_pair_table_scope", OPT_UINT32,
                          &grasp_pair_table_scope,
                          "IMA pair table scope: 0=per-warp, 1=per-CTA, "

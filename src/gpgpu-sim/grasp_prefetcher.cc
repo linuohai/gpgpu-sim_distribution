@@ -400,11 +400,12 @@ void grasp_prefetcher_t::on_instruction_issue(unsigned warp_id,
                            (unsigned)tt_idx);
       m_ct.entry(ct_idx).last_access_time = cycle;
       // Per-entry speculative stride: CSV stride_hint > data_size > global default
+      // data_size fallback only activates when speculative stride is globally enabled
       {
         auto it = m_stride_hints.find(chain.index_pc);
         if (it != m_stride_hints.end()) {
           m_ct.entry(ct_idx).speculative_stride_hint = it->second;
-        } else if (chain.index_data_size > 0) {
+        } else if (m_cfg.speculative_stride != 0 && chain.index_data_size > 0) {
           m_ct.entry(ct_idx).speculative_stride_hint =
               static_cast<int64_t>(chain.index_data_size);
         }
@@ -697,16 +698,72 @@ grasp_prefetcher_t::prefetch_result_t grasp_prefetcher_t::inject_prefetch(
 
     grasp_prefetch_request_t req = m_prefetch_queue[ready_idx];
 
-    // Throttle Control: suppress DATA_PF when MSHR is congested.
+    // Throttle Control: suppress DATA_PF based on tc_mode strategy.
     // INDEX_PF is NOT throttled (critical for pipeline correctness).
     bool is_data_pf = req.seed_chain_ids.empty();
-    if (is_data_pf && l1d && m_cfg.tc_mshr_threshold > 0) {
-      float mshr_ratio = l1d->mshr_occupancy_ratio() * 100.0f;
-      if (mshr_ratio >= (float)m_cfg.tc_mshr_threshold) {
-        // MSHR congested: discard this DATA_PF
+    if (is_data_pf && l1d) {
+      bool suppress = false;
+
+      if (m_cfg.tc_mode == 0) {
+        // Legacy: binary MSHR threshold (exact current behavior)
+        if (m_cfg.tc_mshr_threshold > 0) {
+          float pct = l1d->mshr_occupancy_ratio() * 100.0f;
+          suppress = (pct >= (float)m_cfg.tc_mshr_threshold);
+        }
+      } else if (m_cfg.tc_mode == 1) {
+        // S1: Dual-threshold proportional
+        float pct = l1d->mshr_occupancy_ratio() * 100.0f;
+        if (pct >= (float)m_cfg.tc_mshr_hi) {
+          suppress = true;
+        } else if (pct > (float)m_cfg.tc_mshr_lo) {
+          float drop_prob = (pct - (float)m_cfg.tc_mshr_lo) /
+                            (float)(m_cfg.tc_mshr_hi - m_cfg.tc_mshr_lo);
+          suppress = ((cycle % 100) < (unsigned long long)(drop_prob * 100));
+        }
+      } else if (m_cfg.tc_mode == 2) {
+        // S2: Queue-depth cap
+        if (m_cfg.tc_queue_cap > 0) {
+          unsigned data_count = 0;
+          for (const auto &e : m_prefetch_queue)
+            if (e.seed_chain_ids.empty()) ++data_count;
+          suppress = (data_count >= m_cfg.tc_queue_cap);
+        }
+      } else if (m_cfg.tc_mode == 3) {
+        // S3: Accuracy-gated adaptive threshold
+        float pct = l1d->mshr_occupancy_ratio() * 100.0f;
+        unsigned long long total_pt = m_stats.pair_table_lookup_hit +
+                                      m_stats.pair_table_lookup_miss;
+        float acc = total_pt > 0
+            ? 100.0f * (float)m_stats.pair_table_lookup_hit / (float)total_pt
+            : 50.0f;
+        float eff_thr;
+        if (acc <= (float)m_cfg.tc_acc_lo)
+          eff_thr = (float)m_cfg.tc_mshr_lo;
+        else if (acc >= (float)m_cfg.tc_acc_hi)
+          eff_thr = (float)m_cfg.tc_mshr_hi;
+        else {
+          float t = (acc - (float)m_cfg.tc_acc_lo) /
+                    (float)(m_cfg.tc_acc_hi - m_cfg.tc_acc_lo);
+          eff_thr = (float)m_cfg.tc_mshr_lo +
+                    t * (float)(m_cfg.tc_mshr_hi - m_cfg.tc_mshr_lo);
+        }
+        suppress = (pct >= eff_thr);
+      } else if (m_cfg.tc_mode == 4) {
+        // S4: Cooldown timer
+        float pct = l1d->mshr_occupancy_ratio() * 100.0f;
+        if (cycle < m_tc_cooldown_until) {
+          suppress = true;
+        } else if (m_cfg.tc_mshr_threshold > 0 &&
+                   pct >= (float)m_cfg.tc_mshr_threshold) {
+          suppress = true;
+          m_tc_cooldown_until = cycle + m_cfg.tc_cooldown_cycles;
+        }
+      }
+
+      if (suppress) {
         m_prefetch_queue.erase(m_prefetch_queue.begin() + ready_idx);
         ++m_stats.throttle_suppressed;
-        continue;  // try next request
+        continue;
       }
     }
 
@@ -922,10 +979,15 @@ void grasp_prefetcher_t::print_config(FILE *fp) const {
   fprintf(fp,
           "GRASP_CONFIG: cd_fifo=%u ct_size=%u tt_size=%u "
           "ist_ipt=%u ist_dist=%u ist_conf=%u "
-          "prb_cap=%u tc_mshr_thr=%u pt_scope=%u spec_stride=%lld\n",
+          "prb_cap=%u tc_mode=%u tc_mshr_thr=%u "
+          "tc_mshr_lo=%u tc_mshr_hi=%u tc_queue_cap=%u tc_cooldown=%u "
+          "tc_acc_lo=%u tc_acc_hi=%u "
+          "pt_scope=%u spec_stride=%lld\n",
           m_cfg.cd_fifo_depth, m_cfg.ct_size, m_cfg.tt_size,
           m_cfg.ist_ipt_size, m_cfg.ist_distance, m_cfg.ist_confidence,
-          m_cfg.prb_capacity, m_cfg.tc_mshr_threshold,
+          m_cfg.prb_capacity, m_cfg.tc_mode, m_cfg.tc_mshr_threshold,
+          m_cfg.tc_mshr_lo, m_cfg.tc_mshr_hi, m_cfg.tc_queue_cap,
+          m_cfg.tc_cooldown_cycles, m_cfg.tc_acc_lo, m_cfg.tc_acc_hi,
           m_cfg.pair_table_scope, (long long)m_cfg.speculative_stride);
 }
 

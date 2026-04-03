@@ -65,7 +65,14 @@ struct grasp_config_t {
   char *chain_csv = nullptr;
 
   // Throttle Control
+  unsigned tc_mode = 0;             // 0=legacy, 1=dual-thr, 2=queue-cap, 3=acc-gate, 4=cooldown
   unsigned tc_mshr_threshold = 80;  // MSHR occupancy %, suppress data PF above
+  unsigned tc_mshr_lo = 50;         // S1/S3: lower MSHR threshold %
+  unsigned tc_mshr_hi = 90;         // S1/S3: upper MSHR threshold %
+  unsigned tc_queue_cap = 0;        // S2: max data PFs in queue (0=disabled)
+  unsigned tc_cooldown_cycles = 0;  // S4: cooldown duration after trigger
+  unsigned tc_acc_lo = 30;          // S3: accuracy % for tight throttle
+  unsigned tc_acc_hi = 60;          // S3: accuracy % for loose throttle
 
   // Pair Table scope (trace-driven)
   unsigned pair_table_scope = 0;  // 0=per-warp, 1=per-CTA, 2=per-kernel
@@ -355,6 +362,9 @@ class grasp_prefetcher_t {
 
   // Cross-kernel CT persistence
   std::string m_last_kernel_name;
+
+  // Throttle Control runtime state (S4: cooldown)
+  unsigned long long m_tc_cooldown_until = 0;
 
   // Helpers
   void queue_prefetch(new_addr_type addr, unsigned warp_id,
