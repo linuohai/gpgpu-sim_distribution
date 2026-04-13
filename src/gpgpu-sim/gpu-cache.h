@@ -1464,6 +1464,14 @@ class baseline_cache : public cache_t {
   unsigned mshr_peak() const { return m_mshrs.peak_occupancy(); }
   unsigned mshr_capacity() const { return m_config.m_mshr_entries; }
 
+  // S5 dynamic throttle: sliding window pf outcome feedback
+  unsigned long long pf_useful_count() const {
+    return m_tag_array->get_demand_hit_prefetch();
+  }
+  unsigned long long pf_useless_count() const {
+    return m_tag_array->get_pf_useless();
+  }
+
  protected:
   // Constructor that can be used by derived classes with custom tag arrays
   baseline_cache(const char *name, cache_config &config, int core_id,

@@ -465,13 +465,13 @@ void shader_core_config::reg_options(class OptionParser *opp) {
   option_parser_register(opp, "-grasp_tc_mode", OPT_UINT32,
                          &grasp_tc_mode,
                          "GRASP throttle mode: 0=legacy, 1=dual-thr, "
-                         "2=queue-cap, 3=acc-gate, 4=cooldown",
-                         "0");
+                         "2=queue-cap, 3=acc-gate, 4=cooldown, 5=dynamic",
+                         "5");
   option_parser_register(opp, "-grasp_tc_mshr_threshold", OPT_UINT32,
                          &grasp_tc_mshr_threshold,
                          "GRASP throttle: MSHR occupancy %% above which data "
                          "PF is suppressed",
-                         "80");
+                         "40");
   option_parser_register(opp, "-grasp_tc_mshr_lo", OPT_UINT32,
                          &grasp_tc_mshr_lo,
                          "GRASP throttle: lower MSHR threshold %% (S1/S3)",
@@ -486,16 +486,20 @@ void shader_core_config::reg_options(class OptionParser *opp) {
                          "0");
   option_parser_register(opp, "-grasp_tc_cooldown", OPT_UINT32,
                          &grasp_tc_cooldown_cycles,
-                         "GRASP throttle: cooldown cycles after trigger (S4)",
-                         "0");
+                         "GRASP throttle: cooldown cycles after trigger (S4/S5)",
+                         "200");
   option_parser_register(opp, "-grasp_tc_acc_lo", OPT_UINT32,
                          &grasp_tc_acc_lo,
                          "GRASP throttle: accuracy %% for tight throttle (S3)",
                          "30");
   option_parser_register(opp, "-grasp_tc_acc_hi", OPT_UINT32,
                          &grasp_tc_acc_hi,
-                         "GRASP throttle: accuracy %% for loose throttle (S3)",
+                         "GRASP throttle: accuracy %% for loose throttle (S3/S5)",
                          "60");
+  option_parser_register(opp, "-grasp_tc_window", OPT_UINT32,
+                         &grasp_tc_window_cycles,
+                         "GRASP throttle: sliding window size in cycles (S5)",
+                         "5000");
   option_parser_register(opp, "-grasp_pair_table_scope", OPT_UINT32,
                          &grasp_pair_table_scope,
                          "IMA pair table scope: 0=per-warp, 1=per-CTA, "
@@ -510,6 +514,16 @@ void shader_core_config::reg_options(class OptionParser *opp) {
                          &grasp_pair_table_dump_path,
                          "dump pair table addr_map to CSV (empty=disabled)",
                          "");
+  option_parser_register(opp, "-grasp_ipu_enable", OPT_BOOL,
+                         &grasp_ipu_enable,
+                         "enable index prefetch unit (default: 1)", "1");
+  option_parser_register(opp, "-grasp_dpu_enable", OPT_BOOL,
+                         &grasp_dpu_enable,
+                         "enable data prefetch unit (default: 1)", "1");
+  option_parser_register(opp, "-grasp_no_throttle", OPT_BOOL,
+                         &grasp_no_throttle,
+                         "bottleneck mode: disable TC + retry L1 rfail (default: 0)",
+                         "0");
   option_parser_register(
       opp, "-n_regfile_gating_group", OPT_UINT32, &n_regfile_gating_group,
       "group of lanes that should be read/written together)", "4");

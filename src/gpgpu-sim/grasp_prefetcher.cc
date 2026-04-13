@@ -22,7 +22,7 @@
 // ============================================================================
 
 grasp_prb_t::grasp_prb_t(unsigned initial_capacity)
-    : m_entries(initial_capacity) {}
+    : m_entries(initial_capacity), m_capacity(initial_capacity) {}
 
 // v7 P1: allocate without candidates (filled per-sector at inject time)
 int grasp_prb_t::allocate(unsigned warp_id, unsigned num_sectors,
@@ -45,15 +45,9 @@ int grasp_prb_t::allocate(unsigned warp_id, unsigned num_sectors,
       return static_cast<int>(i);
     }
   }
-  // Expand if capacity allows (Phase 1: dynamic growth)
-  m_entries.emplace_back();
-  init_entry(m_entries.back());
-  ++m_stats.current_occupancy;
-  ++m_stats.total_allocations;
-  if (m_stats.current_occupancy > m_stats.peak_occupancy) {
-    m_stats.peak_occupancy = m_stats.current_occupancy;
-  }
-  return static_cast<int>(m_entries.size() - 1);
+  // Hard cap: reject if all slots occupied
+  ++m_stats.prb_drop_count;
+  return -1;
 }
 
 // v7 P1: add candidates for a specific sector to an existing PRB entry
@@ -350,9 +344,12 @@ void grasp_prefetcher_t::on_instruction_issue(unsigned warp_id,
   }
 
   // Extract first active lane address (for stride seed at CT_INSERT)
+  // Guard: per-thread info must be valid, otherwise get_addr() asserts
+  // (seen on LS PTA kernel 11: some load insts reach here before addresses
+  // are computed, 2026-04-07).
   new_addr_type first_lane_addr = 0;
   unsigned first_lane_id = 0;
-  if (!inst.empty() && inst.is_load()) {
+  if (!inst.empty() && inst.is_load() && inst.has_per_thread_info()) {
     for (unsigned l = 0; l < inst.warp_size(); ++l) {
       if (inst.active(l)) {
         first_lane_addr = inst.get_addr(l);
@@ -485,12 +482,13 @@ void grasp_prefetcher_t::on_demand_load(unsigned warp_id, new_addr_type pc,
   ct_entry_t &cte_mut = m_ct.entry(ct_idx);
 
   // Extract lowest active lane and its address from the warp instruction
+  // Guard: per-thread info must be valid (see PTA fix 2026-04-07)
   new_addr_type lane_addr = addr;  // fallback
   unsigned lane_id = (unsigned)-1;
   bool has_lane_addr = false;
   if (mf) {
     const warp_inst_t &inst = mf->get_inst();
-    if (!inst.empty() && inst.is_load()) {
+    if (!inst.empty() && inst.is_load() && inst.has_per_thread_info()) {
       for (unsigned l = 0; l < inst.warp_size(); ++l) {
         if (inst.active(l)) {
           lane_addr = inst.get_addr(l);
@@ -596,60 +594,90 @@ void grasp_prefetcher_t::on_demand_load(unsigned warp_id, new_addr_type pc,
   if (mf) {
     const warp_inst_t &pf_inst = mf->get_inst();
     if (!pf_inst.empty()) {
+      // Guard: skip if per-lane addresses are not valid (e.g., barrier /
+      // control-flow inst reaching this path, or inst constructed before
+      // address computation). Without this check, get_addr(l) below asserts
+      // in abstract_hardware_model.h:1222 and crashes the simulator — first
+      // surfaced on LS PTA kernel 11 (2026-04-07).
+      if (!pf_inst.has_per_thread_info()) return;
       const unsigned n = m_cfg.ist_distance;
       static const new_addr_type SECTOR_MASK = ~((new_addr_type)31);
 
-      // 2a. Group predicted lane addresses by sector
-      // Using vectors of pairs to maintain stable sector ordering
-      std::vector<std::pair<new_addr_type, std::vector<new_addr_type>>>
-          sector_to_lanes;
+      // Compute predicted lane addresses (shared by IPU and Data-Only paths)
+      std::vector<new_addr_type> predicted_addrs;
       for (unsigned l = 0; l < pf_inst.warp_size(); ++l) {
         if (!pf_inst.active(l)) continue;
-        new_addr_type predicted = static_cast<new_addr_type>(
+        predicted_addrs.push_back(static_cast<new_addr_type>(
             static_cast<int64_t>(pf_inst.get_addr(l)) +
-            static_cast<int64_t>(n) * cte_mut.iter_stride);
-        new_addr_type sector = predicted & SECTOR_MASK;
-        // Find or create sector bucket
-        bool found = false;
-        for (auto &p : sector_to_lanes) {
-          if (p.first == sector) {
-            // Within-sector dedup (two lanes may predict same byte address)
-            bool dup = false;
-            for (auto a : p.second) {
-              if (a == predicted) { dup = true; break; }
+            static_cast<int64_t>(n) * cte_mut.iter_stride));
+      }
+      if (predicted_addrs.empty()) return;
+
+      if (m_cfg.ipu_enable) {
+        // === IPU path: enqueue INDEX_PF ===
+        // 2a. Group predicted lane addresses by sector
+        std::vector<std::pair<new_addr_type, std::vector<new_addr_type>>>
+            sector_to_lanes;
+        for (auto predicted : predicted_addrs) {
+          new_addr_type sector = predicted & SECTOR_MASK;
+          bool found = false;
+          for (auto &p : sector_to_lanes) {
+            if (p.first == sector) {
+              bool dup = false;
+              for (auto a : p.second) {
+                if (a == predicted) { dup = true; break; }
+              }
+              if (!dup) p.second.push_back(predicted);
+              found = true;
+              break;
             }
-            if (!dup) p.second.push_back(predicted);
-            found = true;
-            break;
+          }
+          if (!found) {
+            sector_to_lanes.push_back({sector, {predicted}});
           }
         }
-        if (!found) {
-          sector_to_lanes.push_back({sector, {predicted}});
+
+        if (sector_to_lanes.empty()) return;
+
+        // 2b. Allocate ONE shared PRB entry
+        unsigned num_sectors = static_cast<unsigned>(sector_to_lanes.size());
+        int prb_id = m_prb.allocate(warp_id, num_sectors, cycle);
+        if (prb_id < 0) return;  // PRB full — skip entire instruction
+
+        // 2c. Queue one INDEX_PF per sector with shared prb_id + lane_addrs
+        for (auto &p : sector_to_lanes) {
+          queue_prefetch(p.first, warp_id, seed_chain_ids, cycle,
+                         prb_id, p.second);
+          ++m_stats.ist_prefetch_generated;
+          if (grasp_tracer::enabled()) {
+            char det[128];
+            snprintf(det, sizeof(det),
+                     "ct_idx=%d;distance=%u;stride=%lld;n_sectors=%u;prb=%d;"
+                     "lanes=%zu",
+                     ct_idx, n, (long long)cte_mut.iter_stride,
+                     num_sectors, prb_id, p.second.size());
+            grasp_tracer::emit(m_sm_id, warp_id, cycle, "IDX_PF_ENQUEUE",
+                               (unsigned long long)pc,
+                               (unsigned long long)p.first, det);
+          }
         }
-      }
-
-      if (sector_to_lanes.empty()) return;
-
-      // 2b. Allocate ONE shared PRB entry
-      unsigned num_sectors = static_cast<unsigned>(sector_to_lanes.size());
-      int prb_id = m_prb.allocate(warp_id, num_sectors, cycle);
-      if (prb_id < 0) return;  // PRB full — skip entire instruction
-
-      // 2c. Queue one INDEX_PF per sector with shared prb_id + lane_addrs
-      for (auto &p : sector_to_lanes) {
-        queue_prefetch(p.first, warp_id, seed_chain_ids, cycle,
-                       prb_id, p.second);
-        ++m_stats.ist_prefetch_generated;
-        if (grasp_tracer::enabled()) {
-          char det[128];
-          snprintf(det, sizeof(det),
-                   "ct_idx=%d;distance=%u;stride=%lld;n_sectors=%u;prb=%d;"
-                   "lanes=%zu",
-                   ct_idx, n, (long long)cte_mut.iter_stride,
-                   num_sectors, prb_id, p.second.size());
-          grasp_tracer::emit(m_sm_id, warp_id, cycle, "IDX_PF_ENQUEUE",
-                             (unsigned long long)pc,
-                             (unsigned long long)p.first, det);
+      } else if (m_cfg.dpu_enable) {
+        // === Data-Only path: skip INDEX_PF, generate DATA_PF directly ===
+        // Pair table lookup on predicted addresses → enqueue data prefetches
+        if (warp) {
+          std::set<new_addr_type> seen_sectors;
+          for (auto pa : predicted_addrs) {
+            auto cands = warp->lookup_ima_prefetch_candidates(
+                pa, seed_chain_ids, /*exact_match_only=*/true);
+            for (auto &c : cands) {
+              new_addr_type data_sector = c.data_addr & SECTOR_MASK;
+              if (seen_sectors.insert(data_sector).second) {
+                queue_prefetch(data_sector, warp_id, c.successor_chain_ids,
+                               cycle);
+                ++m_stats.data_pf_enqueued;
+              }
+            }
+          }
         }
       }
       return;
@@ -657,7 +685,7 @@ void grasp_prefetcher_t::on_demand_load(unsigned warp_id, new_addr_type pc,
   }
 
   // Fallback (no mf): single-address prefetch at target distance
-  {
+  if (m_cfg.ipu_enable) {
     new_addr_type paddr = static_cast<new_addr_type>(
         static_cast<int64_t>(addr) +
         static_cast<int64_t>(m_cfg.ist_distance) * cte_mut.iter_stride);
@@ -700,8 +728,9 @@ grasp_prefetcher_t::prefetch_result_t grasp_prefetcher_t::inject_prefetch(
 
     // Throttle Control: suppress DATA_PF based on tc_mode strategy.
     // INDEX_PF is NOT throttled (critical for pipeline correctness).
+    // Bottleneck mode (no_throttle=true) bypasses the entire gate.
     bool is_data_pf = req.seed_chain_ids.empty();
-    if (is_data_pf && l1d) {
+    if (is_data_pf && l1d && !m_cfg.no_throttle) {
       bool suppress = false;
 
       if (m_cfg.tc_mode == 0) {
@@ -758,6 +787,41 @@ grasp_prefetcher_t::prefetch_result_t grasp_prefetcher_t::inject_prefetch(
           suppress = true;
           m_tc_cooldown_until = cycle + m_cfg.tc_cooldown_cycles;
         }
+      } else if (m_cfg.tc_mode == 5) {
+        // S5: Dynamic cooldown with sliding window accuracy feedback
+        // Update window periodically using L1 pf_useful/pf_useless deltas
+        if (cycle >= m_tc_last_snapshot_cycle + m_cfg.tc_window_cycles) {
+          unsigned long long cur_useful = l1d->pf_useful_count();
+          unsigned long long cur_useless = l1d->pf_useless_count();
+          unsigned long long d_useful = cur_useful - m_tc_snapshot_useful;
+          unsigned long long d_useless = cur_useless - m_tc_snapshot_useless;
+          unsigned long long d_total = d_useful + d_useless;
+          m_tc_window_accuracy = d_total > 0
+              ? (float)d_useful * 100.0f / (float)d_total : 50.0f;
+          m_tc_snapshot_useful = cur_useful;
+          m_tc_snapshot_useless = cur_useless;
+          m_tc_last_snapshot_cycle = cycle;
+        }
+        // Interpolate effective MSHR threshold from window accuracy
+        float eff_thr;
+        if (m_tc_window_accuracy <= (float)m_cfg.tc_acc_lo)
+          eff_thr = (float)m_cfg.tc_mshr_lo;
+        else if (m_tc_window_accuracy >= (float)m_cfg.tc_acc_hi)
+          eff_thr = (float)m_cfg.tc_mshr_hi;
+        else {
+          float t = (m_tc_window_accuracy - (float)m_cfg.tc_acc_lo) /
+                    (float)(m_cfg.tc_acc_hi - m_cfg.tc_acc_lo);
+          eff_thr = (float)m_cfg.tc_mshr_lo +
+                    t * (float)(m_cfg.tc_mshr_hi - m_cfg.tc_mshr_lo);
+        }
+        // Cooldown + dynamic threshold
+        float pct = l1d->mshr_occupancy_ratio() * 100.0f;
+        if (cycle < m_tc_cooldown_until) {
+          suppress = true;
+        } else if (pct >= eff_thr) {
+          suppress = true;
+          m_tc_cooldown_until = cycle + m_cfg.tc_cooldown_cycles;
+        }
       }
 
       if (suppress) {
@@ -790,7 +854,12 @@ grasp_prefetcher_t::prefetch_result_t grasp_prefetcher_t::inject_prefetch(
   ima_prefetch_kind_t pf_kind =
       req.seed_chain_ids.empty() ? IMA_PREFETCH_DATA : IMA_PREFETCH_INDEX;
 
-  if (!req.seed_chain_ids.empty()) {
+  // Bottleneck mode: retry requests skip the pair-table lookup + PRB
+  // candidate add path — candidates were stored on the first attempt.
+  // Just propagate prb_entry_id so on_l1_access_result can find the PRB entry.
+  if (req.is_retry && !req.seed_chain_ids.empty()) {
+    prb_entry_id = req.prb_entry_id;
+  } else if (!req.seed_chain_ids.empty()) {
     // v7 P1: PRB was pre-allocated in on_demand_load
     assert(req.prb_entry_id >= 0);
     prb_entry_id = req.prb_entry_id;
@@ -921,6 +990,37 @@ void grasp_prefetcher_t::on_l1_access_result(
     // DO NOT free PRB — on_fill will handle it.
   } else if (cache_status == RESERVATION_FAIL) {
     emit_l1_result("L1_RESULT_RFAIL");
+
+    // Bottleneck mode: retry by re-enqueueing the request for next cycle.
+    // Must NOT call mark_sector_failed — PRB entry still owns this sector.
+    // Safety cap (16384) prevents unbounded queue growth under pathological load.
+    static const size_t RETRY_QUEUE_CAP = 16384;
+    if (m_cfg.no_throttle && m_prefetch_queue.size() < RETRY_QUEUE_CAP) {
+      grasp_prefetch_request_t retry_req;
+      retry_req.addr = mf->get_addr();
+      retry_req.warp_id = mf->get_wid();
+      retry_req.ready_cycle = cycle + 1;
+      retry_req.is_retry = true;
+      if (is_index) {
+        // Preserve INDEX kind via dummy non-empty seed_chain_ids (content
+        // ignored because is_retry=true bypasses pair-table lookup).
+        retry_req.seed_chain_ids.push_back(0);
+        retry_req.prb_entry_id = (int)prb_entry_id;
+        ++m_stats.index_pf_rfail_retried;
+        ++m_stats.index_pf_reservation_fail;
+        ++m_stats.index_pf_rfail[fail_reason];
+      } else {
+        // DATA_PF: empty seed_chain_ids preserves DATA kind
+        retry_req.prb_entry_id = -1;
+        ++m_stats.data_pf_rfail_retried;
+        ++m_stats.data_pf_reservation_fail;
+        ++m_stats.data_pf_rfail[fail_reason];
+      }
+      m_prefetch_queue.push_back(retry_req);
+      delete mf;  // RFAIL: cache did NOT take ownership; retry rebuilds mf
+      return;
+    }
+
     // v7 P1: per-sector RFAIL — mark failed + decrement remaining_sectors
     if (is_index && prb_entry_id != (unsigned)-1 &&
         m_prb.get(prb_entry_id).valid) {
@@ -981,14 +1081,17 @@ void grasp_prefetcher_t::print_config(FILE *fp) const {
           "ist_ipt=%u ist_dist=%u ist_conf=%u "
           "prb_cap=%u tc_mode=%u tc_mshr_thr=%u "
           "tc_mshr_lo=%u tc_mshr_hi=%u tc_queue_cap=%u tc_cooldown=%u "
-          "tc_acc_lo=%u tc_acc_hi=%u "
-          "pt_scope=%u spec_stride=%lld\n",
+          "tc_acc_lo=%u tc_acc_hi=%u tc_window=%u "
+          "pt_scope=%u spec_stride=%lld ipu=%d dpu=%d no_throttle=%d\n",
           m_cfg.cd_fifo_depth, m_cfg.ct_size, m_cfg.tt_size,
           m_cfg.ist_ipt_size, m_cfg.ist_distance, m_cfg.ist_confidence,
           m_cfg.prb_capacity, m_cfg.tc_mode, m_cfg.tc_mshr_threshold,
           m_cfg.tc_mshr_lo, m_cfg.tc_mshr_hi, m_cfg.tc_queue_cap,
           m_cfg.tc_cooldown_cycles, m_cfg.tc_acc_lo, m_cfg.tc_acc_hi,
-          m_cfg.pair_table_scope, (long long)m_cfg.speculative_stride);
+          m_cfg.tc_window_cycles,
+          m_cfg.pair_table_scope, (long long)m_cfg.speculative_stride,
+          (int)m_cfg.ipu_enable, (int)m_cfg.dpu_enable,
+          (int)m_cfg.no_throttle);
 }
 
 void grasp_prefetcher_t::print_stats(FILE *fp, unsigned long long pf_useful,
@@ -1049,9 +1152,10 @@ void grasp_prefetcher_t::print_stats(FILE *fp, unsigned long long pf_useful,
 
   const auto &prb_s = m_prb.stats();
   fprintf(fp,
-          "GRASP_PRB SM%u: peak_occ=%llu allocs=%llu stall_cycles=%llu\n",
+          "GRASP_PRB SM%u: peak_occ=%llu allocs=%llu stall_cycles=%llu "
+          "drops=%llu\n",
           m_sm_id, prb_s.peak_occupancy, prb_s.total_allocations,
-          prb_s.full_stall_cycles);
+          prb_s.full_stall_cycles, prb_s.prb_drop_count);
 
   // Storage utilization summary (peak occupancy vs configured capacity)
   {
@@ -1164,6 +1268,30 @@ void grasp_prefetcher_t::print_stats(FILE *fp, unsigned long long pf_useful,
     }
     fprintf(fp, " data_got_data=%llu\n", data_got_data);
   }
+
+  // Bottleneck analysis: theoretical demand vs actual issue vs rfail/retry
+  // Uses ima_demand_breakdown_t (from ldst_unit) as theoretical denominator.
+  if (ima) {
+    unsigned long long idx_accepted = m_stats.index_pf_hit +
+                                      m_stats.index_pf_mshr_merge +
+                                      m_stats.index_pf_issued;
+    unsigned long long data_accepted = m_stats.data_pf_hit +
+                                       m_stats.data_pf_mshr_merge +
+                                       m_stats.data_pf_issued;
+    fprintf(fp,
+            "GRASP_BOTTLENECK SM%u: "
+            "idx_theory=%llu idx_generated=%llu idx_accepted=%llu "
+            "idx_rfail=%llu idx_retried=%llu | "
+            "data_theory=%llu data_enqueued=%llu data_accepted=%llu "
+            "data_rfail=%llu data_retried=%llu | "
+            "tc_suppressed=%llu no_throttle=%d\n",
+            m_sm_id,
+            ima->idx_reads, m_stats.ist_prefetch_generated, idx_accepted,
+            m_stats.index_pf_reservation_fail, m_stats.index_pf_rfail_retried,
+            ima->data_reads, m_stats.data_pf_enqueued, data_accepted,
+            m_stats.data_pf_reservation_fail, m_stats.data_pf_rfail_retried,
+            m_stats.throttle_suppressed, (int)m_cfg.no_throttle);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1243,31 +1371,33 @@ void grasp_prefetcher_t::release_prb_sector_targets(
     }
 
     // Coalesce DATA_PF by 32B sector; INDEX_PF (non-empty successors) not coalesced
-    static const new_addr_type SECTOR_MASK = ~((new_addr_type)31);
-    std::vector<new_addr_type> seen;
-    for (const auto &cand : sd.candidates) {
-      new_addr_type data_sector = cand.data_addr & SECTOR_MASK;
-      if (cand.successor_chain_ids.empty()) {
-        bool dup = false;
-        for (auto s : seen) {
-          if (s == data_sector) { dup = true; break; }
+    if (m_cfg.dpu_enable) {
+      static const new_addr_type SECTOR_MASK = ~((new_addr_type)31);
+      std::vector<new_addr_type> seen;
+      for (const auto &cand : sd.candidates) {
+        new_addr_type data_sector = cand.data_addr & SECTOR_MASK;
+        if (cand.successor_chain_ids.empty()) {
+          bool dup = false;
+          for (auto s : seen) {
+            if (s == data_sector) { dup = true; break; }
+          }
+          if (dup) continue;
+          seen.push_back(data_sector);
         }
-        if (dup) continue;
-        seen.push_back(data_sector);
+        queue_prefetch(data_sector, entry.warp_id, cand.successor_chain_ids,
+                       ready_cycle);
+        ++m_stats.data_pf_enqueued;
+        if (grasp_tracer::enabled()) {
+          char det2[128];
+          snprintf(det2, sizeof(det2), "chain_id=%u;prb_id=%u;succ=%zu",
+                   cand.source_chain_id, prb_entry_id,
+                   cand.successor_chain_ids.size());
+          grasp_tracer::emit(m_sm_id, entry.warp_id, ready_cycle,
+                             "DATA_PF_ENQUEUE",
+                             0, (unsigned long long)data_sector, det2);
+        }
       }
-      queue_prefetch(data_sector, entry.warp_id, cand.successor_chain_ids,
-                     ready_cycle);
-      ++m_stats.data_pf_enqueued;
-      if (grasp_tracer::enabled()) {
-        char det2[128];
-        snprintf(det2, sizeof(det2), "chain_id=%u;prb_id=%u;succ=%zu",
-                 cand.source_chain_id, prb_entry_id,
-                 cand.successor_chain_ids.size());
-        grasp_tracer::emit(m_sm_id, entry.warp_id, ready_cycle,
-                           "DATA_PF_ENQUEUE",
-                           0, (unsigned long long)data_sector, det2);
-      }
-    }
+    }  // dpu_enable
 
     assert(entry.remaining_sectors > 0);
     --entry.remaining_sectors;

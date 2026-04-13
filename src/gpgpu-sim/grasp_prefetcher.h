@@ -65,20 +65,28 @@ struct grasp_config_t {
   char *chain_csv = nullptr;
 
   // Throttle Control
-  unsigned tc_mode = 0;             // 0=legacy, 1=dual-thr, 2=queue-cap, 3=acc-gate, 4=cooldown
-  unsigned tc_mshr_threshold = 80;  // MSHR occupancy %, suppress data PF above
+  unsigned tc_mode = 5;             // 0=legacy, 1=dual-thr, 2=queue-cap, 3=acc-gate, 4=cooldown, 5=dynamic
+  unsigned tc_mshr_threshold = 40;  // MSHR occupancy %, suppress data PF above
   unsigned tc_mshr_lo = 50;         // S1/S3: lower MSHR threshold %
   unsigned tc_mshr_hi = 90;         // S1/S3: upper MSHR threshold %
   unsigned tc_queue_cap = 0;        // S2: max data PFs in queue (0=disabled)
-  unsigned tc_cooldown_cycles = 0;  // S4: cooldown duration after trigger
-  unsigned tc_acc_lo = 30;          // S3: accuracy % for tight throttle
-  unsigned tc_acc_hi = 60;          // S3: accuracy % for loose throttle
+  unsigned tc_cooldown_cycles = 200; // S4/S5: cooldown duration after trigger
+  unsigned tc_acc_lo = 30;          // S3/S5: accuracy % for tight throttle
+  unsigned tc_acc_hi = 60;          // S3/S5: accuracy % for loose throttle
+  unsigned tc_window_cycles = 5000; // S5: sliding window size in cycles
 
   // Pair Table scope (trace-driven)
   unsigned pair_table_scope = 0;  // 0=per-warp, 1=per-CTA, 2=per-kernel
 
   // Speculative stride: assumed stride on first observation (0=disabled)
   int speculative_stride = 0;
+
+  // Ablation: enable/disable individual pipeline stages
+  bool ipu_enable = true;   // false = skip index prefetch (Data-Only ablation)
+  bool dpu_enable = true;   // false = skip data prefetch (Index-Only ablation)
+
+  // Bottleneck analysis: disable TC + retry L1 reservation fail
+  bool no_throttle = false;
 };
 
 // ============================================================================
@@ -92,6 +100,7 @@ struct grasp_prefetch_request_t {
   unsigned long long ready_cycle = 0;
   int prb_entry_id = -1;                 // >=0: pre-allocated shared PRB (v7 P1)
   std::vector<new_addr_type> lane_addrs;  // v7 P2: specific predicted addresses in this sector
+  bool is_retry = false;                  // bottleneck mode: skip pair-table lookup on re-dispatch
 };
 
 // ============================================================================
@@ -147,11 +156,13 @@ class grasp_prb_t {
     unsigned long long full_stall_cycles = 0;
     unsigned long long total_allocations = 0;
     unsigned long long total_lifetime_cycles = 0;  // cumulative entry lifetime
+    unsigned long long prb_drop_count = 0;         // hard cap rejections
   };
   const prb_stats_t &stats() const { return m_stats; }
 
  private:
   std::vector<grasp_prb_entry_t> m_entries;
+  unsigned m_capacity;
   prb_stats_t m_stats;
 };
 
@@ -225,6 +236,10 @@ struct grasp_stats_t {
   unsigned long long data_pf_reservation_fail = 0;  // total (sum of per-reason)
   unsigned long long data_pf_rfail[NUM_CACHE_RESERVATION_FAIL_STATUS] = {};
   unsigned long long data_pf_enqueued = 0;  // data PF candidates queued after index fill
+
+  // Bottleneck analysis: count rfails that were re-enqueued (no_throttle=true only)
+  unsigned long long index_pf_rfail_retried = 0;
+  unsigned long long data_pf_rfail_retried = 0;
 
   // Pair Table
   unsigned long long pair_table_lookup_hit = 0;
@@ -363,8 +378,12 @@ class grasp_prefetcher_t {
   // Cross-kernel CT persistence
   std::string m_last_kernel_name;
 
-  // Throttle Control runtime state (S4: cooldown)
-  unsigned long long m_tc_cooldown_until = 0;
+  // Throttle Control runtime state
+  unsigned long long m_tc_cooldown_until = 0;          // S4/S5: cooldown expiry
+  unsigned long long m_tc_last_snapshot_cycle = 0;     // S5: last window snapshot
+  unsigned long long m_tc_snapshot_useful = 0;         // S5: pf_useful at snapshot
+  unsigned long long m_tc_snapshot_useless = 0;        // S5: pf_useless at snapshot
+  float m_tc_window_accuracy = 50.0f;                 // S5: current window accuracy %
 
   // Helpers
   void queue_prefetch(new_addr_type addr, unsigned warp_id,

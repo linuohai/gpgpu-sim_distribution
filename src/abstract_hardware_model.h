@@ -1222,6 +1222,7 @@ class warp_inst_t : public inst_t {
     assert(m_per_scalar_thread_valid);
     return m_per_scalar_thread[n].memreqaddr[0];
   }
+  bool has_per_thread_info() const { return m_per_scalar_thread_valid; }
 
   bool isatomic() const { return m_isatomic; }
 

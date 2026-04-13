@@ -1813,9 +1813,13 @@ class shader_core_config : public core_config {
   unsigned grasp_tc_cooldown_cycles;
   unsigned grasp_tc_acc_lo;
   unsigned grasp_tc_acc_hi;
+  unsigned grasp_tc_window_cycles;
   unsigned grasp_pair_table_scope;  // 0=per-warp, 1=per-CTA, 2=per-kernel
   char *grasp_pair_table_dump_path;  // CSV dump of pair table addr_map (empty=disabled)
   int grasp_speculative_stride;  // speculative stride on first obs (0=disabled)
+  bool grasp_ipu_enable;         // enable index prefetch unit
+  bool grasp_dpu_enable;         // enable data prefetch unit
+  bool grasp_no_throttle;        // bottleneck analysis: disable TC + retry L1 rfail
   bool gpgpu_clock_gated_reg_file;
   bool gpgpu_clock_gated_lanes;
   enum divergence_support_t model;
