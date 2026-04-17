@@ -782,7 +782,18 @@ void dram_t::print(FILE *simFile) const {
   fprintf(simFile, "\n");
   fprintf(simFile, "dram_util_bins:");
   for (i = 0; i < 10; i++) fprintf(simFile, " %d", dram_util_bins[i]);
-  fprintf(simFile, "\ndram_eff_bins:");
+  fprintf(simFile, "\n");
+  // SC.2: machine-parseable bins for sim-vs-real-MAPE parser.
+  // Bin i represents cycles where DRAM util fell in [10i%, 10(i+1)%) range.
+  // Parser computes effective util = sum((10i+5) * bins[i]) / total.
+  {
+    unsigned long long total_dram_cycles = 0;
+    for (unsigned sc2_i = 0; sc2_i < 10; sc2_i++) total_dram_cycles += dram_util_bins[sc2_i];
+    fprintf(simFile, "DRAM_UTIL_BINS:");
+    for (unsigned sc2_i = 0; sc2_i < 10; sc2_i++) fprintf(simFile, " %u", dram_util_bins[sc2_i]);
+    fprintf(simFile, " (total=%llu)\n", total_dram_cycles);
+  }
+  fprintf(simFile, "dram_eff_bins:");
   for (i = 0; i < 10; i++) fprintf(simFile, " %d", dram_eff_bins[i]);
   fprintf(simFile, "\n");
   if (m_config->scheduler_type == DRAM_FRFCFS)
@@ -815,7 +826,18 @@ void dram_t::print_stat(FILE *simFile) {
   fprintf(simFile, "\n");
   fprintf(simFile, "dram_util_bins:");
   for (unsigned i = 0; i < 10; i++) fprintf(simFile, " %d", dram_util_bins[i]);
-  fprintf(simFile, "\ndram_eff_bins:");
+  fprintf(simFile, "\n");
+  // SC.2: machine-parseable bins for sim-vs-real-MAPE parser.
+  // Bin i represents cycles where DRAM util fell in [10i%, 10(i+1)%) range.
+  // Parser computes effective util = sum((10i+5) * bins[i]) / total.
+  {
+    unsigned long long total_dram_cycles = 0;
+    for (unsigned sc2_i = 0; sc2_i < 10; sc2_i++) total_dram_cycles += dram_util_bins[sc2_i];
+    fprintf(simFile, "DRAM_UTIL_BINS:");
+    for (unsigned sc2_i = 0; sc2_i < 10; sc2_i++) fprintf(simFile, " %u", dram_util_bins[sc2_i]);
+    fprintf(simFile, " (total=%llu)\n", total_dram_cycles);
+  }
+  fprintf(simFile, "dram_eff_bins:");
   for (unsigned i = 0; i < 10; i++) fprintf(simFile, " %d", dram_eff_bins[i]);
   fprintf(simFile, "\n");
   max_mrqs_temp = 0;
