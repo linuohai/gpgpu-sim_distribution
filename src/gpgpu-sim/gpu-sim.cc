@@ -1866,6 +1866,16 @@ void gpgpu_sim::gpu_print_stat(unsigned long long streamID) {
   printf("gpu_tot_sim_insn = %lld\n", gpu_tot_sim_insn + gpu_sim_insn);
   printf("gpu_tot_ipc = %12.4f\n", (float)(gpu_tot_sim_insn + gpu_sim_insn) /
                                        (gpu_tot_sim_cycle + gpu_sim_cycle));
+  // SC.1: dump warp-level instruction counter aggregated across SMs.
+  // Used by parser to compute warp-IPC = WINSN_TOTAL / cycles / (num_SM *
+  // schedulers_per_SM), aligning with NCU smsp__inst_executed.avg.per_cycle_active.
+  {
+    unsigned long long winsn_total = 0;
+    for (unsigned i = 0; i < m_shader_config->num_shader(); i++) {
+      winsn_total += m_shader_stats->m_num_sim_winsn[i];
+    }
+    printf("WINSN_TOTAL: %llu\n", winsn_total);
+  }
   printf("gpu_tot_issued_cta = %lld\n",
          gpu_tot_issued_cta + m_total_cta_launched);
   printf("gpu_occupancy = %.4f%% \n", gpu_occupancy.get_occ_fraction() * 100);
