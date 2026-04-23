@@ -1099,6 +1099,12 @@ class warp_inst_t : public inst_t {
   }
   virtual ~warp_inst_t() {}
 
+  // GRASP: override in trace_warp_inst_t to return full SASS mnemonic
+  virtual const std::string &get_sass_opcode() const {
+    static const std::string empty;
+    return empty;
+  }
+
   // modifiers
   void broadcast_barrier_reduction(const active_mask_t &access_mask);
   void do_atomic(bool forceDo = false);

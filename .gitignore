@@ -72,3 +72,4 @@ setup
 __pycache__/
 
 src/coder-read
+gpgpu_inst_stats.txt

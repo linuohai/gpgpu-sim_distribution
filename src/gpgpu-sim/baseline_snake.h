@@ -9,7 +9,10 @@ class baseline_cache;
 
 struct baseline_snake_config_t {
   bool enable = false;
-  unsigned ht_size = 20;    // paper Table 3: 10, but 20 for multi-kernel apps
+  // Current implementation uses one PC-indexed table that blends paper Head
+  // and promoted Tail state. In that merged design, the practical capacity
+  // should track the paper Head table, not the 10-entry Tail table.
+  unsigned ht_size = 32;
   unsigned training_warps = 3;
   unsigned max_chain_length = 2;  // paper depth controlled by throttle
 };
@@ -54,6 +57,7 @@ class baseline_snake_prefetcher_t : public baseline_prefetcher_t {
     //  Snake stores information from two different warps per PC_ld."
     struct warp_slot_t {
       unsigned warp_id = static_cast<unsigned>(-1);
+      unsigned cta_id = static_cast<unsigned>(-1);
       new_addr_type addr = 0;
       bool valid = false;
     };
@@ -80,7 +84,7 @@ class baseline_snake_prefetcher_t : public baseline_prefetcher_t {
 
   // --- Per-warp Head Table (paper §3.1) ---
   // Store 2 most recent (PC, addr) per warp for IT detection + IaW direct
-  struct warp_pc_tracker_t {
+ struct warp_pc_tracker_t {
     struct slot_t {
       new_addr_type pc = 0;
       new_addr_type addr = 0;
@@ -90,12 +94,40 @@ class baseline_snake_prefetcher_t : public baseline_prefetcher_t {
     // Most recent is slots[0], second is slots[1]
   };
 
+  enum class uniform_gate_reason_t {
+    kPassSingleActive,
+    kPassAffine,
+    kRejectNoActive,
+    kRejectMixedStride,
+    kRejectNonAffineProgression,
+  };
+
+  struct uniform_gate_result_t {
+    bool accepted = false;
+    new_addr_type first_addr = 0;
+    unsigned active_count = 0;
+    unsigned first_lane = 0;
+    unsigned last_lane = 0;
+    uniform_gate_reason_t reason = uniform_gate_reason_t::kRejectNoActive;
+  };
+
+  struct gate_reject_sample_t {
+    new_addr_type pc = 0;
+    uniform_gate_reason_t reason = uniform_gate_reason_t::kRejectNoActive;
+    unsigned active_count = 0;
+    unsigned first_lane = 0;
+    unsigned last_lane = 0;
+  };
+
   int find_ht_entry(new_addr_type pc) const;
   int alloc_ht_entry(new_addr_type pc, unsigned long long cycle);
   void update_head_table_slots(ht_entry_t &entry, unsigned warp_id,
-                                new_addr_type addr);
+                               unsigned cta_id, new_addr_type addr);
   void update_it_stride(ht_entry_t &prev_entry, new_addr_type prev_addr,
                          new_addr_type cur_pc, new_addr_type cur_addr);
+  uniform_gate_result_t classify_uniform_warp_addr(
+      const warp_inst_t &inst) const;
+  static const char *uniform_gate_reason_name(uniform_gate_reason_t reason);
   void generate_prefetches(const ht_entry_t &entry, new_addr_type addr,
                             unsigned warp_id, unsigned long long cycle);
 
@@ -110,10 +142,10 @@ class baseline_snake_prefetcher_t : public baseline_prefetcher_t {
   // Throttle state (Snake paper §3.3)
   unsigned long long m_throttle_until = 0;
   static constexpr unsigned kThrottlePauseCycles = 50;
-  // Prefetch lookahead: skip nearby (too late) and prefetch further ahead
-  // With GTO, adjacent warps are 1-2 cycles apart; need ~100+ cycle lead
-  // IeW stride=8 → need offset ~20 (20*8=160 bytes ahead ≈ 100+ cycles)
-  static constexpr unsigned kIeWLookahead = 16;  // prefetch 16 strides ahead
+  // Paper-faithful default: IeW predicts the next future warp for this PC.
+  // Larger distances, if ever needed, should come from an explicit knob rather
+  // than a hard-coded heuristic baked into Snake.
+  static constexpr unsigned kIeWLookahead = 1;
   static constexpr unsigned kIaWLookahead = 1;   // IaW is within same warp, degree=1
 
   // Per-stride-type diagnostic counters
@@ -121,11 +153,32 @@ class baseline_snake_prefetcher_t : public baseline_prefetcher_t {
   unsigned m_pf_iew_issued = 0;
   unsigned m_pf_it_issued = 0;
   unsigned m_training_completions = 0;
+  unsigned m_training_unique_warps = 0;
+  unsigned m_training_duplicate_warps = 0;
   unsigned m_it_chain_follows = 0;
+  unsigned long long m_issue_global_loads = 0;
+  unsigned m_uniform_gate_passes = 0;
+  unsigned m_uniform_gate_rejects = 0;
+  unsigned m_uniform_gate_reject_kept_tracker = 0;
+  unsigned m_uniform_gate_pass_single_active = 0;
+  unsigned m_uniform_gate_pass_affine = 0;
+  unsigned m_uniform_gate_reject_no_active = 0;
+  unsigned m_uniform_gate_reject_mixed_stride = 0;
+  unsigned m_uniform_gate_reject_non_affine = 0;
+  unsigned long long m_uniform_gate_active_threads_total = 0;
+  unsigned long long m_uniform_gate_multi_active_total = 0;
+  unsigned m_lane_non_uniform_filtered = 0;
+  unsigned m_pc_table_allocations = 0;
+  unsigned m_pc_table_evictions = 0;
+  unsigned m_iew_cta_mismatch = 0;
+  unsigned long long m_demand_loads = 0;
   // IaW accumulation debug counters
   unsigned m_iaw_accum_checks = 0;    // times IT stride path entered
   unsigned m_iaw_it_not_valid = 0;    // blocked: IT stride not valid
   unsigned m_iaw_pc_mismatch = 0;     // blocked: it_next_pc != last_pc
   unsigned m_iaw_chain_found = 0;     // found via chain following
   unsigned m_iaw_accum_ok = 0;        // successfully computed IaW
+
+  static constexpr unsigned kMaxGateRejectSamples = 8;
+  std::vector<gate_reject_sample_t> m_gate_reject_samples;
 };

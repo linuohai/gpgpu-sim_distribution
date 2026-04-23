@@ -6,6 +6,23 @@
 #include "gpu-cache.h"
 #include "shader.h"
 
+const char *baseline_snake_prefetcher_t::uniform_gate_reason_name(
+    uniform_gate_reason_t reason) {
+  switch (reason) {
+    case uniform_gate_reason_t::kPassSingleActive:
+      return "single_active";
+    case uniform_gate_reason_t::kPassAffine:
+      return "affine";
+    case uniform_gate_reason_t::kRejectNoActive:
+      return "no_active";
+    case uniform_gate_reason_t::kRejectMixedStride:
+      return "mixed_stride";
+    case uniform_gate_reason_t::kRejectNonAffineProgression:
+      return "non_affine_progression";
+  }
+  return "unknown";
+}
+
 baseline_snake_prefetcher_t::baseline_snake_prefetcher_t(
     unsigned sm_id, const baseline_snake_config_t &cfg, baseline_cache *l1d)
     : baseline_prefetcher_t(sm_id),
@@ -23,12 +40,31 @@ void baseline_snake_prefetcher_t::on_kernel_launch() {
   m_pf_iew_issued = 0;
   m_pf_it_issued = 0;
   m_training_completions = 0;
+  m_training_unique_warps = 0;
+  m_training_duplicate_warps = 0;
   m_it_chain_follows = 0;
+  m_issue_global_loads = 0;
+  m_uniform_gate_passes = 0;
+  m_uniform_gate_rejects = 0;
+  m_uniform_gate_reject_kept_tracker = 0;
+  m_uniform_gate_pass_single_active = 0;
+  m_uniform_gate_pass_affine = 0;
+  m_uniform_gate_reject_no_active = 0;
+  m_uniform_gate_reject_mixed_stride = 0;
+  m_uniform_gate_reject_non_affine = 0;
+  m_uniform_gate_active_threads_total = 0;
+  m_uniform_gate_multi_active_total = 0;
+  m_lane_non_uniform_filtered = 0;
+  m_pc_table_allocations = 0;
+  m_pc_table_evictions = 0;
+  m_iew_cta_mismatch = 0;
+  m_demand_loads = 0;
   m_iaw_accum_checks = 0;
   m_iaw_it_not_valid = 0;
   m_iaw_pc_mismatch = 0;
   m_iaw_chain_found = 0;
   m_iaw_accum_ok = 0;
+  m_gate_reject_samples.clear();
 }
 
 void baseline_snake_prefetcher_t::on_warp_exit(unsigned warp_id) {
@@ -55,6 +91,7 @@ int baseline_snake_prefetcher_t::alloc_ht_entry(new_addr_type pc,
       m_ht[i].valid = true;
       m_ht[i].pc = pc;
       m_ht[i].last_access_cycle = cycle;
+      m_pc_table_allocations++;
       return static_cast<int>(i);
     }
   }
@@ -71,10 +108,12 @@ int baseline_snake_prefetcher_t::alloc_ht_entry(new_addr_type pc,
     if (ci.training_warp_count() != vi.training_warp_count()) continue;
     if (ci.last_access_cycle < vi.last_access_cycle) { victim = i; }
   }
+  m_pc_table_evictions++;
   m_ht[victim] = ht_entry_t();
   m_ht[victim].valid = true;
   m_ht[victim].pc = pc;
   m_ht[victim].last_access_cycle = cycle;
+  m_pc_table_allocations++;
   return static_cast<int>(victim);
 }
 
@@ -86,7 +125,8 @@ int baseline_snake_prefetcher_t::alloc_ht_entry(new_addr_type pc,
 //   - Replace LRU slot with (W, A)
 
 void baseline_snake_prefetcher_t::update_head_table_slots(
-    ht_entry_t &entry, unsigned warp_id, new_addr_type addr) {
+    ht_entry_t &entry, unsigned warp_id, unsigned cta_id,
+    new_addr_type addr) {
   auto &s0 = entry.head_slots[0];
   auto &s1 = entry.head_slots[1];
 
@@ -99,12 +139,14 @@ void baseline_snake_prefetcher_t::update_head_table_slots(
   if (my_slot >= 0) {
     // Same warp revisiting this PC → just update address
     entry.head_slots[my_slot].addr = addr;
+    entry.head_slots[my_slot].cta_id = cta_id;
   } else {
     // IeW: different warp accessing same PC
-    // Compare with the most recent valid slot
+    // Compare with the most recent same-CTA slot. Paper IeW only trains
+    // across warps from the same CTA.
     int other = -1;
-    if (s0.valid) other = 0;
-    if (s1.valid) other = 1;  // prefer slot 1 (more recent)
+    if (s0.valid && s0.cta_id == cta_id) other = 0;
+    if (s1.valid && s1.cta_id == cta_id) other = 1;  // prefer slot 1 (more recent)
 
     if (other >= 0) {
       auto &slot = entry.head_slots[other];
@@ -118,11 +160,14 @@ void baseline_snake_prefetcher_t::update_head_table_slots(
           entry.iew_confirmed = false;
         }
       }
+    } else if (s0.valid || s1.valid) {
+      m_iew_cta_mismatch++;
     }
 
     // Replace the oldest/invalid slot with this warp
     ht_entry_t::warp_slot_t new_slot;
     new_slot.warp_id = warp_id;
+    new_slot.cta_id = cta_id;
     new_slot.addr = addr;
     new_slot.valid = true;
 
@@ -184,6 +229,66 @@ void baseline_snake_prefetcher_t::update_it_stride(
   }
 }
 
+baseline_snake_prefetcher_t::uniform_gate_result_t
+baseline_snake_prefetcher_t::classify_uniform_warp_addr(
+    const warp_inst_t &inst) const {
+  uniform_gate_result_t result;
+  bool have_first = false;
+  bool have_stride = false;
+  unsigned prev_lane = 0;
+  new_addr_type prev_addr = 0;
+  int64_t lane_stride = 0;
+
+  for (unsigned lane = 0; lane < inst.warp_size(); ++lane) {
+    if (!inst.active(lane)) continue;
+    result.active_count++;
+    if (result.active_count == 1) {
+      result.first_lane = lane;
+    }
+    result.last_lane = lane;
+    const new_addr_type lane_addr = inst.get_addr(lane);
+    if (!have_first) {
+      result.first_addr = lane_addr;
+      prev_addr = lane_addr;
+      prev_lane = lane;
+      have_first = true;
+      continue;
+    }
+
+    const unsigned lane_delta = lane - prev_lane;
+    if (lane_delta == 0) {
+      result.reason = uniform_gate_reason_t::kRejectNonAffineProgression;
+      return result;
+    }
+    const int64_t addr_delta =
+        static_cast<int64_t>(lane_addr) - static_cast<int64_t>(prev_addr);
+    if (addr_delta % static_cast<int64_t>(lane_delta) != 0) {
+      result.reason = uniform_gate_reason_t::kRejectNonAffineProgression;
+      return result;
+    }
+    const int64_t cur_stride = addr_delta / static_cast<int64_t>(lane_delta);
+    if (!have_stride) {
+      lane_stride = cur_stride;
+      have_stride = true;
+    } else if (lane_stride != cur_stride) {
+      result.reason = uniform_gate_reason_t::kRejectMixedStride;
+      return result;
+    }
+    prev_addr = lane_addr;
+    prev_lane = lane;
+  }
+
+  if (!have_first) {
+    result.reason = uniform_gate_reason_t::kRejectNoActive;
+    return result;
+  }
+  result.accepted = true;
+  result.reason =
+      result.active_count == 1 ? uniform_gate_reason_t::kPassSingleActive
+                               : uniform_gate_reason_t::kPassAffine;
+  return result;
+}
+
 // --- Prefetch generation (paper §3.2) ---
 // Three types of prefetch: IaW, IeW, and IT chain.
 // IT chain follows HT entries: entry[PC_A].it_next_pc → find entry[PC_B] → ...
@@ -219,23 +324,40 @@ void baseline_snake_prefetcher_t::generate_prefetches(
     m_pf_iaw_issued++;
   }
 
-  // 2. IeW prefetch: skip nearby warps (too late), prefetch further ahead
-  // Paper §3.2: "each thread to prefetch for future warps"
-  // With GTO, adjacent warps execute within 1-2 cycles.
-  // Prefetch ~16 warps ahead for ~100 cycle L2 round trip.
-  if (entry.iew_confirmed && entry.iew_stride != 0) {
+  // 2. IT chain prefetch: follow PC1 -> PC2 -> ... using trained IT strides.
+  // Keep IT ahead of IeW when both are possible for the same trigger.
+  bool issued_it_chain = false;
+  const ht_entry_t *chain_entry = &entry;
+  new_addr_type chain_addr = addr;
+  for (unsigned depth = 0; depth < m_cfg.max_chain_length; ++depth) {
+    if (!chain_entry->it_stride_valid || chain_entry->it_next_pc == 0) break;
+
+    chain_addr = static_cast<new_addr_type>(
+        static_cast<int64_t>(chain_addr) +
+        static_cast<int64_t>(chain_entry->it_stride));
+    queue_prefetch(chain_addr, warp_id, cycle);
+    m_pf_it_issued++;
+    issued_it_chain = true;
+
+    const int next_idx = find_ht_entry(chain_entry->it_next_pc);
+    if (next_idx < 0) break;
+    const ht_entry_t &next_entry = m_ht[next_idx];
+    if (!next_entry.training_done) break;
+    chain_entry = &next_entry;
+    if (depth + 1 < m_cfg.max_chain_length) {
+      m_it_chain_follows++;
+    }
+  }
+
+  // 3. IeW prefetch: only when IT chain did not already claim the trigger.
+  // Paper §3.2 prefers chain-based lookahead over future-warp prediction.
+  if (!issued_it_chain && entry.iew_confirmed && entry.iew_stride != 0) {
     new_addr_type pf_addr = static_cast<new_addr_type>(
         static_cast<int64_t>(addr) +
         static_cast<int64_t>(entry.iew_stride) * kIeWLookahead);
     queue_prefetch(pf_addr, warp_id, cycle);
     m_pf_iew_issued++;
   }
-
-  // 3. IT chain prefetch: DISABLED (s-Snake mode)
-  // Empirical finding: IT strides are unstable across loop iterations when
-  // different PCs in the loop have different IaW strides. This causes
-  // massive useless prefetch volume (srad: 1B IT pf, 17% accuracy).
-  // s-Snake (IaW+IeW only) matches paper's reported ~70% accuracy baseline.
 }
 
 // --- Early detection at instruction issue (paper §3.1, Figure 14) ---
@@ -258,22 +380,68 @@ void baseline_snake_prefetcher_t::on_instruction_issue_with_cta(
   // Only process global loads
   if (!inst.is_load() || inst.space.get_type() != global_space)
     return;
+  m_issue_global_loads++;
 
   new_addr_type pc = inst.pc;
-  // Use first active lane's address (consistent, no coalescing ambiguity)
   new_addr_type addr = 0;
-  for (unsigned lane = 0; lane < inst.warp_size(); ++lane) {
-    if (inst.active(lane)) {
-      addr = inst.get_addr(lane);
-      break;
-    }
-  }
-  if (addr == 0) return;
-
   warp_pc_tracker_t *tracker = nullptr;
   if (warp_id < m_warp_trackers.size()) {
     tracker = &m_warp_trackers[warp_id];
   }
+
+  // Paper §3.2: only keep the first-thread address when the warp exhibits a
+  // uniform lane stride; otherwise exclude this issue from Snake training.
+  const uniform_gate_result_t gate_result = classify_uniform_warp_addr(inst);
+  m_uniform_gate_active_threads_total += gate_result.active_count;
+  if (gate_result.active_count > 1) {
+    m_uniform_gate_multi_active_total++;
+  }
+  if (!gate_result.accepted) {
+    m_uniform_gate_rejects++;
+    switch (gate_result.reason) {
+      case uniform_gate_reason_t::kRejectNoActive:
+        m_uniform_gate_reject_no_active++;
+        break;
+      case uniform_gate_reason_t::kRejectMixedStride:
+        m_uniform_gate_reject_mixed_stride++;
+        break;
+      case uniform_gate_reason_t::kRejectNonAffineProgression:
+        m_uniform_gate_reject_non_affine++;
+        break;
+      case uniform_gate_reason_t::kPassSingleActive:
+      case uniform_gate_reason_t::kPassAffine:
+        break;
+    }
+    if (m_gate_reject_samples.size() < kMaxGateRejectSamples) {
+      gate_reject_sample_t sample;
+      sample.pc = pc;
+      sample.reason = gate_result.reason;
+      sample.active_count = gate_result.active_count;
+      sample.first_lane = gate_result.first_lane;
+      sample.last_lane = gate_result.last_lane;
+      m_gate_reject_samples.push_back(sample);
+    }
+    if (tracker != nullptr &&
+        (tracker->slots[0].valid || tracker->slots[1].valid)) {
+      m_uniform_gate_reject_kept_tracker++;
+    }
+    m_lane_non_uniform_filtered++;
+    return;
+  }
+  m_uniform_gate_passes++;
+  switch (gate_result.reason) {
+    case uniform_gate_reason_t::kPassSingleActive:
+      m_uniform_gate_pass_single_active++;
+      break;
+    case uniform_gate_reason_t::kPassAffine:
+      m_uniform_gate_pass_affine++;
+      break;
+    case uniform_gate_reason_t::kRejectNoActive:
+    case uniform_gate_reason_t::kRejectMixedStride:
+    case uniform_gate_reason_t::kRejectNonAffineProgression:
+      break;
+  }
+  addr = gate_result.first_addr;
 
   int ht_idx = find_ht_entry(pc);
   if (ht_idx < 0) {
@@ -287,10 +455,13 @@ void baseline_snake_prefetcher_t::on_instruction_issue_with_cta(
     if (warp_id < 64 &&
         !(entry.warp_confirmed_mask & (1ULL << warp_id))) {
       entry.warp_confirmed_mask |= (1ULL << warp_id);
+      m_training_unique_warps++;
       if (entry.training_warp_count() >= m_cfg.training_warps) {
         entry.training_done = true;
         m_training_completions++;
       }
+    } else if (warp_id < 64) {
+      m_training_duplicate_warps++;
     }
   }
 
@@ -359,7 +530,7 @@ void baseline_snake_prefetcher_t::on_instruction_issue_with_cta(
   }
 
   // --- Head Table per-PC slots: IeW detection ---
-  update_head_table_slots(entry, warp_id, addr);
+  update_head_table_slots(entry, warp_id, cta_id, addr);
 
   // --- Prefetch generation ---
   if (entry.training_done) {
@@ -379,6 +550,7 @@ void baseline_snake_prefetcher_t::on_demand_load(
   (void)pc;
   (void)addr;
   (void)cycle;
+  m_demand_loads++;
   // Only track demand access stats for accuracy/coverage computation.
   // All stride detection and prefetch generation now happens at issue time
   // in on_instruction_issue() for better timeliness.
@@ -387,13 +559,60 @@ void baseline_snake_prefetcher_t::on_demand_load(
 
 void baseline_snake_prefetcher_t::print_stats(FILE *fp) const {
   print_common_stats(fp, "BASELINE_SNAKE");
+  const baseline_stats_t stats = finalized_stats();
+  const unsigned long long predicted_requests =
+      m_pf_iaw_issued + m_pf_iew_issued + m_pf_it_issued;
+  const unsigned long long timely_correct = stats.prefetch_useful;
+  const double coverage_paper =
+      m_demand_loads == 0
+          ? 0.0
+          : static_cast<double>(timely_correct) /
+                static_cast<double>(m_demand_loads);
+  const double accuracy_paper =
+      predicted_requests == 0
+          ? 0.0
+          : static_cast<double>(timely_correct) /
+                static_cast<double>(predicted_requests);
   fprintf(fp,
           "BASELINE_SNAKE_DETAIL SM%u: "
           "pf_iaw_issued=%u pf_iew_issued=%u pf_it_issued=%u "
           "it_chain_follows=%u training_completions=%u "
+          "training_unique_warps=%u training_duplicate_warps=%u "
+          "issue_global_loads=%llu uniform_gate_passes=%u "
+          "uniform_gate_rejects=%u uniform_gate_reject_kept_tracker=%u "
+          "uniform_gate_pass_single_active=%u uniform_gate_pass_affine=%u "
+          "uniform_gate_reject_no_active=%u "
+          "uniform_gate_reject_mixed_stride=%u "
+          "uniform_gate_reject_non_affine=%u "
+          "uniform_gate_active_threads_total=%llu "
+          "uniform_gate_multi_active_total=%llu "
+          "lane_non_uniform_filtered=%u "
+          "table_allocations=%u table_evictions=%u iew_cta_mismatch=%u "
+          "coverage_paper=%.6f accuracy_paper=%.6f "
+          "demand_loads=%llu predicted_requests=%llu timely_correct=%llu "
           "iaw_checks=%u iaw_it_nv=%u iaw_pc_mm=%u iaw_ok=%u\n",
           m_sm_id, m_pf_iaw_issued, m_pf_iew_issued, m_pf_it_issued,
           m_it_chain_follows, m_training_completions,
+          m_training_unique_warps, m_training_duplicate_warps,
+          m_issue_global_loads, m_uniform_gate_passes,
+          m_uniform_gate_rejects, m_uniform_gate_reject_kept_tracker,
+          m_uniform_gate_pass_single_active, m_uniform_gate_pass_affine,
+          m_uniform_gate_reject_no_active, m_uniform_gate_reject_mixed_stride,
+          m_uniform_gate_reject_non_affine,
+          m_uniform_gate_active_threads_total,
+          m_uniform_gate_multi_active_total,
+          m_lane_non_uniform_filtered,
+          m_pc_table_allocations, m_pc_table_evictions, m_iew_cta_mismatch,
+          coverage_paper, accuracy_paper, m_demand_loads, predicted_requests,
+          timely_correct,
           m_iaw_accum_checks, m_iaw_it_not_valid, m_iaw_pc_mismatch,
           m_iaw_accum_ok);
+  for (const auto &sample : m_gate_reject_samples) {
+    fprintf(fp,
+            "BASELINE_SNAKE_GATE_SAMPLE SM%u: pc=0x%llx reason=%s "
+            "active_count=%u first_lane=%u last_lane=%u\n",
+            m_sm_id, static_cast<unsigned long long>(sample.pc),
+            uniform_gate_reason_name(sample.reason), sample.active_count,
+            sample.first_lane, sample.last_lane);
+  }
 }
